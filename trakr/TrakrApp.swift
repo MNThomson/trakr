@@ -18,4 +18,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         menuBarController = MenuBarController()
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        ActivityTracker.shared.saveState()
+    }
 }

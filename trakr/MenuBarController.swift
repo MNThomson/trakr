@@ -40,7 +40,7 @@ class MenuBarController {
 
     private func setupMenu() {
         infoMenuItem.isEnabled = false
-        infoMenuItem.title = "⧖ \(ActivityTracker.shared.formattedActiveTime)"
+        infoMenuItem.title = formattedInfoLine()
         menu.addItem(infoMenuItem)
         menu.addItem(.separator())
         menu.addItem(createMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q"))
@@ -64,17 +64,30 @@ class MenuBarController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateMenuItemTitle() }
             .store(in: &cancellables)
+
+        ActivityTracker.shared.$workStartTime
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateMenuItemTitle() }
+            .store(in: &cancellables)
     }
 
     // MARK: - UI Updates
 
+    private func formattedInfoLine() -> String {
+        let start = ActivityTracker.shared.formattedWorkStartTime ?? "—"
+        let active = ActivityTracker.shared.formattedActiveTime
+        let finish = ActivityTracker.shared.formattedEstimatedFinishTime ?? "—"
+        return "☼ \(start)  ⧖ \(active)  ⚑ \(finish)"
+    }
+
     private func updateMenuItemTitle() {
-        infoMenuItem.title = "⧖ \(ActivityTracker.shared.formattedActiveTime)"
+        infoMenuItem.title = formattedInfoLine()
     }
 
     // MARK: - Actions
 
     @objc private func quitApp() {
+        ActivityTracker.shared.saveState()
         NSApplication.shared.terminate(nil)
     }
 }

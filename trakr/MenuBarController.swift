@@ -23,6 +23,7 @@ class MenuBarController {
 
     private let presetIdleThresholds = [60, 120, 180, 300, 600]
     private let presetEyeBreakIntervals = [15, 20, 30]  // minutes
+    private let presetWindDownMinutes = [15, 20, 30, 45]  // minutes
 
     // MARK: - Initialization
 
@@ -186,6 +187,18 @@ class MenuBarController {
             title: "Post-Zoom Stretch", action: #selector(togglePostZoomStretch))
         postZoomStretchItem.state = ActivityTracker.shared.postZoomStretchEnabled ? .on : .off
         settingsSubmenu.addItem(postZoomStretchItem)
+
+        // End-of-Day Wind Down toggle
+        let windDownItem = createMenuItem(
+            title: "End-of-Day Wind Down", action: #selector(toggleWindDown))
+        windDownItem.state = ActivityTracker.shared.windDownEnabled ? .on : .off
+        settingsSubmenu.addItem(windDownItem)
+
+        // Wind Down Timing submenu
+        let windDownTimingSubmenu = createWindDownTimingSubmenu()
+        let windDownTimingItem = NSMenuItem(title: "Wind Down Timing", action: nil, keyEquivalent: "")
+        windDownTimingItem.submenu = windDownTimingSubmenu
+        settingsSubmenu.addItem(windDownTimingItem)
     }
 
     private func createEyeBreakIntervalSubmenu() -> NSMenu {
@@ -203,6 +216,25 @@ class MenuBarController {
         submenu.addItem(.separator())
         submenu.addItem(
             createMenuItem(title: "Custom...", action: #selector(showCustomEyeBreakIntervalInput)))
+
+        return submenu
+    }
+
+    private func createWindDownTimingSubmenu() -> NSMenu {
+        let submenu = NSMenu()
+        let currentValue = ActivityTracker.shared.windDownMinutes
+
+        for minutes in presetWindDownMinutes {
+            let title = "\(minutes) min before"
+            let item = createMenuItem(title: title, action: #selector(setWindDownTiming(_:)))
+            item.tag = minutes
+            item.state = minutes == currentValue ? .on : .off
+            submenu.addItem(item)
+        }
+
+        submenu.addItem(.separator())
+        submenu.addItem(
+            createMenuItem(title: "Custom...", action: #selector(showCustomWindDownTimingInput)))
 
         return submenu
     }
@@ -356,6 +388,18 @@ class MenuBarController {
                 action: #selector(setEyeBreakInterval(_:))
             )
         }
+
+        // Update Wind Down Timing submenu (index 11: after wind down toggle)
+        if let windDownTimingSubmenu = settingsSubmenu.item(at: 11)?.submenu {
+            let currentMinutes = ActivityTracker.shared.windDownMinutes
+            updateSubmenuCheckmarks(
+                submenu: windDownTimingSubmenu,
+                currentValue: currentMinutes,
+                presets: presetWindDownMinutes,
+                formatTitle: { "\($0) min before" },
+                action: #selector(setWindDownTiming(_:))
+            )
+        }
     }
 
     private func updateSubmenuCheckmarks(
@@ -460,6 +504,31 @@ class MenuBarController {
     @objc private func togglePostZoomStretch(_ sender: NSMenuItem) {
         ActivityTracker.shared.postZoomStretchEnabled.toggle()
         sender.state = ActivityTracker.shared.postZoomStretchEnabled ? .on : .off
+    }
+
+    @objc private func toggleWindDown(_ sender: NSMenuItem) {
+        ActivityTracker.shared.windDownEnabled.toggle()
+        sender.state = ActivityTracker.shared.windDownEnabled ? .on : .off
+    }
+
+    @objc private func setWindDownTiming(_ sender: NSMenuItem) {
+        let minutes = sender.tag == -1 ? (sender.representedObject as? Int ?? 20) : sender.tag
+        ActivityTracker.shared.windDownMinutes = minutes
+        updateSettingsMenuStates()
+    }
+
+    @objc private func showCustomWindDownTimingInput() {
+        let currentMinutes = ActivityTracker.shared.windDownMinutes
+        showCustomInput(
+            title: "Set Wind Down Timing",
+            message: "Enter minutes before goal to show reminder:",
+            currentValue: String(currentMinutes),
+            validate: { Int($0).flatMap { $0 > 0 && $0 <= 120 ? $0 : nil } },
+            onConfirm: { [weak self] minutes in
+                ActivityTracker.shared.windDownMinutes = minutes
+                self?.updateSettingsMenuStates()
+            }
+        )
     }
 
     @objc private func setEyeBreakInterval(_ sender: NSMenuItem) {

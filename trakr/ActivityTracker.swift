@@ -17,6 +17,8 @@ class ActivityTracker: ObservableObject {
         static let eyeBreakIntervalMinutes = "eyeBreakIntervalMinutes"
         static let stretchBreakEnabled = "stretchBreakEnabled"
         static let postZoomStretchEnabled = "postZoomStretchEnabled"
+        static let windDownEnabled = "windDownEnabled"
+        static let windDownMinutes = "windDownMinutes"
     }
 
     private enum Defaults {
@@ -25,6 +27,7 @@ class ActivityTracker: ObservableObject {
         static let workDayStartHour = 4
         static let saveInterval = 30
         static let eyeBreakIntervalMinutes = 20
+        static let windDownMinutes = 20
     }
 
     // MARK: - Singleton
@@ -75,10 +78,19 @@ class ActivityTracker: ObservableObject {
         didSet { UserDefaults.standard.set(postZoomStretchEnabled, forKey: Keys.postZoomStretchEnabled) }
     }
 
+    var windDownEnabled: Bool {
+        didSet { UserDefaults.standard.set(windDownEnabled, forKey: Keys.windDownEnabled) }
+    }
+
+    var windDownMinutes: Int {
+        didSet { UserDefaults.standard.set(windDownMinutes, forKey: Keys.windDownMinutes) }
+    }
+
     private var timer: Timer?
     private var goalReachedTime: Date?
     private var secondsSinceLastEyeBreak: Int = 0
     private var lastStretchBreakHour: Int?
+    private var windDownShown: Bool = false
 
     private lazy var timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -153,6 +165,9 @@ class ActivityTracker: ObservableObject {
         eyeBreakIntervalMinutes = savedEyeBreakInterval > 0 ? savedEyeBreakInterval : Defaults.eyeBreakIntervalMinutes
         stretchBreakEnabled = UserDefaults.standard.bool(forKey: Keys.stretchBreakEnabled)
         postZoomStretchEnabled = UserDefaults.standard.bool(forKey: Keys.postZoomStretchEnabled)
+        windDownEnabled = UserDefaults.standard.bool(forKey: Keys.windDownEnabled)
+        let savedWindDownMinutes = UserDefaults.standard.integer(forKey: Keys.windDownMinutes)
+        windDownMinutes = savedWindDownMinutes > 0 ? savedWindDownMinutes : Defaults.windDownMinutes
 
         loadState()
         setupZoomDetector()
@@ -204,6 +219,7 @@ class ActivityTracker: ObservableObject {
 
     private func resetForNewWorkDay() {
         resetToInitialState()
+        windDownShown = false
         UserDefaults.standard.removeObject(forKey: Keys.goalReachedTime)
         saveState()
     }
@@ -261,6 +277,9 @@ class ActivityTracker: ObservableObject {
         // Check for eye break (active time based)
         checkEyeBreak()
 
+        // Check for wind-down reminder (20 minutes before goal)
+        checkWindDown()
+
         if activeSeconds >= targetWorkDaySeconds && goalReachedTime == nil {
             goalReachedTime = now
             UserDefaults.standard.set(now, forKey: Keys.goalReachedTime)
@@ -306,6 +325,18 @@ class ActivityTracker: ObservableObject {
         if minute == 55 && lastStretchBreakHour != hour && !ZoomMeetingDetector.shared.isInMeeting {
             EmojiFlashController.shared.flash(emoji: "🤸")
             lastStretchBreakHour = hour
+        }
+    }
+
+    private func checkWindDown() {
+        guard windDownEnabled && !windDownShown else { return }
+
+        let remainingSeconds = targetWorkDaySeconds - activeSeconds
+        let windDownSeconds = windDownMinutes * 60
+
+        if remainingSeconds <= windDownSeconds && remainingSeconds > 0 {
+            windDownShown = true
+            EmojiFlashController.shared.flash(emoji: "⏱️")
         }
     }
 

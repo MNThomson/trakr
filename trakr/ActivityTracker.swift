@@ -39,6 +39,7 @@ class ActivityTracker: ObservableObject {
     @Published private(set) var activeSeconds: Int = 0
     @Published private(set) var workStartTime: Date?
     @Published private(set) var isCurrentlyActive: Bool = false
+    @Published private(set) var isPaused: Bool = false
     @Published var targetWorkDaySeconds: Int {
         didSet {
             UserDefaults.standard.set(targetWorkDaySeconds, forKey: Keys.targetWorkDaySeconds)
@@ -108,6 +109,10 @@ class ActivityTracker: ObservableObject {
         }
     }
 
+    func togglePause() {
+        isPaused.toggle()
+    }
+
     // MARK: - State Management
 
     private func loadState() {
@@ -160,7 +165,7 @@ class ActivityTracker: ObservableObject {
         let isInputActive = getSystemIdleTime() < idleThreshold
         let hasPowerAssertion = hasActivePowerAssertions()
         isCurrentlyActive = isInputActive || hasPowerAssertion
-        guard isCurrentlyActive else { return }
+        guard isCurrentlyActive && !isPaused else { return }
 
         if workStartTime == nil && isAfterWorkDayStart(now) {
             workStartTime = now

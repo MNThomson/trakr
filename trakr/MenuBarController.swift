@@ -8,6 +8,7 @@ class MenuBarController {
     private var statusItem: NSStatusItem
     private var menu: NSMenu
     private var infoMenuItem: NSMenuItem
+    private var pauseMenuItem: NSMenuItem
     private var settingsSubmenu: NSMenu
     private var cancellables = Set<AnyCancellable>()
     private var updateTimer: Timer?
@@ -27,6 +28,7 @@ class MenuBarController {
         menu = NSMenu()
         settingsSubmenu = NSMenu()
         infoMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        pauseMenuItem = NSMenuItem()
 
         setupStatusButton()
         setupMenu()
@@ -53,6 +55,10 @@ class MenuBarController {
         infoMenuItem.view = createInfoView()
         menu.addItem(infoMenuItem)
         menu.addItem(.separator())
+
+        pauseMenuItem = createMenuItem(
+            title: "Pause Tracking", action: #selector(togglePause), keyEquivalent: "p")
+        menu.addItem(pauseMenuItem)
 
         setupSettingsMenu()
 
@@ -148,6 +154,14 @@ class MenuBarController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateStatusIcon() }
             .store(in: &cancellables)
+
+        ActivityTracker.shared.$isPaused
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateStatusIcon()
+                self?.updatePauseMenuItem()
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - UI Updates
@@ -234,7 +248,10 @@ class MenuBarController {
         let symbolName: String
         let variableValue: Double
 
-        if ActivityTracker.shared.isCurrentlyActive {
+        if ActivityTracker.shared.isPaused {
+            symbolName = "pause.fill"
+            variableValue = 0.0
+        } else if ActivityTracker.shared.isCurrentlyActive {
             let progress = min(
                 1.0,
                 Double(ActivityTracker.shared.activeSeconds)
@@ -252,6 +269,11 @@ class MenuBarController {
             accessibilityDescription: "Activity Timer"
         )
         button.image?.isTemplate = true
+    }
+
+    private func updatePauseMenuItem() {
+        let isPaused = ActivityTracker.shared.isPaused
+        pauseMenuItem.title = isPaused ? "Resume Tracking" : "Pause Tracking"
     }
 
     private func updateSettingsMenuStates() {
@@ -348,6 +370,10 @@ class MenuBarController {
     @objc private func quitApp() {
         ActivityTracker.shared.saveState()
         NSApplication.shared.terminate(nil)
+    }
+
+    @objc private func togglePause() {
+        ActivityTracker.shared.togglePause()
     }
 
     @objc private func setIdleThreshold(_ sender: NSMenuItem) {

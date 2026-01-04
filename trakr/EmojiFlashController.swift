@@ -93,13 +93,15 @@ class EmojiFlashController {
     private func fadeOutAndDismiss() {
         guard let window = flashWindow else { return }
 
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = fadeOutDuration
-            window.animator().alphaValue = 0.0
-        }, completionHandler: { [weak self] in
-            self?.flashWindow?.orderOut(nil)
-            self?.flashWindow = nil
-        })
+        NSAnimationContext.runAnimationGroup(
+            { context in
+                context.duration = fadeOutDuration
+                window.animator().alphaValue = 0.0
+            },
+            completionHandler: { [weak self] in
+                self?.flashWindow?.orderOut(nil)
+                self?.flashWindow = nil
+            })
     }
 }
 
@@ -112,7 +114,10 @@ private class EmojiFlashView: NSView {
     private let backgroundOpacity: CGFloat
     private let cornerRadius: CGFloat
 
-    init(frame: NSRect, emoji: String, emojiSize: CGFloat, backgroundOpacity: CGFloat, cornerRadius: CGFloat) {
+    init(
+        frame: NSRect, emoji: String, emojiSize: CGFloat, backgroundOpacity: CGFloat,
+        cornerRadius: CGFloat
+    ) {
         self.emoji = emoji
         self.emojiSize = emojiSize
         self.backgroundOpacity = backgroundOpacity
@@ -129,7 +134,8 @@ private class EmojiFlashView: NSView {
         super.draw(dirtyRect)
 
         // Draw rounded background
-        let backgroundPath = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
+        let backgroundPath = NSBezierPath(
+            roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
         NSColor.black.withAlphaComponent(backgroundOpacity).setFill()
         backgroundPath.fill()
 
@@ -139,7 +145,7 @@ private class EmojiFlashView: NSView {
 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: emojiSize),
-            .paragraphStyle: paragraphStyle
+            .paragraphStyle: paragraphStyle,
         ]
 
         let emojiString = NSAttributedString(string: emoji, attributes: attributes)
@@ -152,4 +158,3 @@ private class EmojiFlashView: NSView {
         emojiString.draw(in: emojiRect)
     }
 }
-

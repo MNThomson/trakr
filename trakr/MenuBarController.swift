@@ -118,7 +118,8 @@ class MenuBarController {
         slackRequireAppItem.state = SlackPresenceMonitor.shared.requireSlackApp ? .on : .off
         settingsSubmenu.addItem(slackRequireAppItem)
         settingsSubmenu.addItem(
-            createMenuItem(title: "Slack Credentials...", action: #selector(showSlackCredentialsInput)))
+            createMenuItem(
+                title: "Slack Credentials...", action: #selector(showSlackCredentialsInput)))
         settingsSubmenu.addItem(
             createMenuItem(title: "Slack User IDs...", action: #selector(showSlackCoworkersInput)))
 
@@ -167,7 +168,8 @@ class MenuBarController {
     private func setupBreakRemindersMenu() {
         // Eye Break Interval submenu (Disabled = 0)
         let eyeBreakIntervalSubmenu = createEyeBreakIntervalSubmenu()
-        let eyeBreakIntervalItem = NSMenuItem(title: "Eye Break (20-20-20)", action: nil, keyEquivalent: "")
+        let eyeBreakIntervalItem = NSMenuItem(
+            title: "Eye Break (20-20-20)", action: nil, keyEquivalent: "")
         eyeBreakIntervalItem.submenu = eyeBreakIntervalSubmenu
         eyeBreakIntervalItem.state = ActivityTracker.shared.eyeBreakIntervalMinutes > 0 ? .on : .off
         settingsSubmenu.addItem(eyeBreakIntervalItem)
@@ -186,14 +188,16 @@ class MenuBarController {
 
         // Wind Down Timing submenu (Disabled = 0)
         let windDownTimingSubmenu = createWindDownTimingSubmenu()
-        let windDownTimingItem = NSMenuItem(title: "Wrap-Up Reminder", action: nil, keyEquivalent: "")
+        let windDownTimingItem = NSMenuItem(
+            title: "Wrap-Up Reminder", action: nil, keyEquivalent: "")
         windDownTimingItem.submenu = windDownTimingSubmenu
         windDownTimingItem.state = ActivityTracker.shared.windDownMinutes > 0 ? .on : .off
         settingsSubmenu.addItem(windDownTimingItem)
 
         // Sunset Alert Timing submenu (Disabled = 0)
         let sunsetAlertTimingSubmenu = createSunsetAlertTimingSubmenu()
-        let sunsetAlertTimingItem = NSMenuItem(title: "Sunset Alert", action: nil, keyEquivalent: "")
+        let sunsetAlertTimingItem = NSMenuItem(
+            title: "Sunset Alert", action: nil, keyEquivalent: "")
         sunsetAlertTimingItem.submenu = sunsetAlertTimingSubmenu
         sunsetAlertTimingItem.state = ActivityTracker.shared.sunsetAlertMinutes > 0 ? .on : .off
         settingsSubmenu.addItem(sunsetAlertTimingItem)
@@ -208,7 +212,8 @@ class MenuBarController {
         let currentValue = ActivityTracker.shared.eyeBreakIntervalMinutes
 
         // Disabled option (value = 0)
-        let disabledItem = createMenuItem(title: "Disabled", action: #selector(setEyeBreakInterval(_:)))
+        let disabledItem = createMenuItem(
+            title: "Disabled", action: #selector(setEyeBreakInterval(_:)))
         disabledItem.tag = 0
         disabledItem.state = currentValue == 0 ? .on : .off
         submenu.addItem(disabledItem)
@@ -235,7 +240,8 @@ class MenuBarController {
         let currentValue = ActivityTracker.shared.windDownMinutes
 
         // Disabled option (value = 0)
-        let disabledItem = createMenuItem(title: "Disabled", action: #selector(setWindDownTiming(_:)))
+        let disabledItem = createMenuItem(
+            title: "Disabled", action: #selector(setWindDownTiming(_:)))
         disabledItem.tag = 0
         disabledItem.state = currentValue == 0 ? .on : .off
         submenu.addItem(disabledItem)
@@ -262,7 +268,8 @@ class MenuBarController {
         let currentValue = ActivityTracker.shared.sunsetAlertMinutes
 
         // Disabled option (value = 0)
-        let disabledItem = createMenuItem(title: "Disabled", action: #selector(setSunsetAlertTiming(_:)))
+        let disabledItem = createMenuItem(
+            title: "Disabled", action: #selector(setSunsetAlertTiming(_:)))
         disabledItem.tag = 0
         disabledItem.state = currentValue == 0 ? .on : .off
         submenu.addItem(disabledItem)
@@ -398,71 +405,53 @@ class MenuBarController {
     }
 
     private func updateSettingsMenuStates() {
-        if let idleSubmenu = settingsSubmenu.item(at: 0)?.submenu {
-            let currentSeconds = Int(ActivityTracker.shared.idleThreshold)
-            let presetValues = presetIdleThresholds
-            updateSubmenuCheckmarks(
-                submenu: idleSubmenu,
-                currentValue: currentSeconds,
-                presets: presetValues,
-                formatTitle: formatIdleThreshold,
-                action: #selector(setIdleThreshold(_:))
-            )
-        }
+        updateIdleSubmenu()
+        updateTargetSubmenu()
+        updateToggleSubmenu(
+            at: 6, currentValue: ActivityTracker.shared.eyeBreakIntervalMinutes,
+            presets: presetEyeBreakIntervals, formatTitle: { "\($0) min" },
+            action: #selector(setEyeBreakInterval(_:)))
+        updateToggleSubmenu(
+            at: 9, currentValue: ActivityTracker.shared.windDownMinutes,
+            presets: presetWindDownMinutes, formatTitle: { "\($0) min before" },
+            action: #selector(setWindDownTiming(_:)))
+        updateToggleSubmenu(
+            at: 10, currentValue: ActivityTracker.shared.sunsetAlertMinutes,
+            presets: presetSunsetAlertMinutes, formatTitle: { "\($0) min before" },
+            action: #selector(setSunsetAlertTiming(_:)))
+    }
 
-        if let targetSubmenu = settingsSubmenu.item(at: 1)?.submenu {
-            let currentSeconds = ActivityTracker.shared.targetWorkDaySeconds
-            let presetValues = presetDurations.map { $0.seconds }
-            updateSubmenuCheckmarks(
-                submenu: targetSubmenu,
-                currentValue: currentSeconds,
-                presets: presetValues,
-                formatTitle: formatDuration,
-                action: #selector(setTargetWorkDayDuration(_:))
-            )
-        }
+    private func updateIdleSubmenu() {
+        guard let idleSubmenu = settingsSubmenu.item(at: 0)?.submenu else { return }
+        updateSubmenuCheckmarks(
+            submenu: idleSubmenu,
+            currentValue: Int(ActivityTracker.shared.idleThreshold),
+            presets: presetIdleThresholds,
+            formatTitle: formatIdleThreshold,
+            action: #selector(setIdleThreshold(_:)))
+    }
 
-        // Update Eye Break Interval submenu (index 6: after idle, target, separator, overlay, zoom, separator)
-        if let eyeBreakItem = settingsSubmenu.item(at: 6),
-           let eyeBreakIntervalSubmenu = eyeBreakItem.submenu {
-            let currentMinutes = ActivityTracker.shared.eyeBreakIntervalMinutes
-            eyeBreakItem.state = currentMinutes > 0 ? .on : .off
-            updateDurationSubmenuCheckmarks(
-                submenu: eyeBreakIntervalSubmenu,
-                currentValue: currentMinutes,
-                presets: presetEyeBreakIntervals,
-                formatTitle: { "\($0) min" },
-                action: #selector(setEyeBreakInterval(_:))
-            )
-        }
+    private func updateTargetSubmenu() {
+        guard let targetSubmenu = settingsSubmenu.item(at: 1)?.submenu else { return }
+        updateSubmenuCheckmarks(
+            submenu: targetSubmenu,
+            currentValue: ActivityTracker.shared.targetWorkDaySeconds,
+            presets: presetDurations.map { $0.seconds },
+            formatTitle: formatDuration,
+            action: #selector(setTargetWorkDayDuration(_:)))
+    }
 
-        // Update Wind Down Timing submenu (index 9: after eye break, stretch, post-zoom)
-        if let windDownItem = settingsSubmenu.item(at: 9),
-           let windDownTimingSubmenu = windDownItem.submenu {
-            let currentMinutes = ActivityTracker.shared.windDownMinutes
-            windDownItem.state = currentMinutes > 0 ? .on : .off
-            updateDurationSubmenuCheckmarks(
-                submenu: windDownTimingSubmenu,
-                currentValue: currentMinutes,
-                presets: presetWindDownMinutes,
-                formatTitle: { "\($0) min before" },
-                action: #selector(setWindDownTiming(_:))
-            )
-        }
-
-        // Update Sunset Alert Timing submenu (index 10: after wind down)
-        if let sunsetAlertItem = settingsSubmenu.item(at: 10),
-           let sunsetAlertTimingSubmenu = sunsetAlertItem.submenu {
-            let currentMinutes = ActivityTracker.shared.sunsetAlertMinutes
-            sunsetAlertItem.state = currentMinutes > 0 ? .on : .off
-            updateDurationSubmenuCheckmarks(
-                submenu: sunsetAlertTimingSubmenu,
-                currentValue: currentMinutes,
-                presets: presetSunsetAlertMinutes,
-                formatTitle: { "\($0) min before" },
-                action: #selector(setSunsetAlertTiming(_:))
-            )
-        }
+    private func updateToggleSubmenu(
+        at index: Int, currentValue: Int, presets: [Int],
+        formatTitle: @escaping (Int) -> String, action: Selector
+    ) {
+        guard let item = settingsSubmenu.item(at: index),
+            let submenu = item.submenu
+        else { return }
+        item.state = currentValue > 0 ? .on : .off
+        updateDurationSubmenuCheckmarks(
+            submenu: submenu, currentValue: currentValue, presets: presets,
+            formatTitle: formatTitle, action: action)
     }
 
     private func updateSubmenuCheckmarks(
@@ -684,9 +673,9 @@ class MenuBarController {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         guard let lat = Double(latField.stringValue.trimmingCharacters(in: .whitespaces)),
-              let lon = Double(lonField.stringValue.trimmingCharacters(in: .whitespaces)),
-              lat >= -90 && lat <= 90,
-              lon >= -180 && lon <= 180
+            let lon = Double(lonField.stringValue.trimmingCharacters(in: .whitespaces)),
+            lat >= -90 && lat <= 90,
+            lon >= -180 && lon <= 180
         else { return }
 
         SunsetCalculator.shared.latitude = lat

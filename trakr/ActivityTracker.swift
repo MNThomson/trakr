@@ -53,17 +53,22 @@ class ActivityTracker: ObservableObject {
     }
 
     var screenOverlayEnabled: Bool {
-        didSet { UserDefaults.standard.set(screenOverlayEnabled, forKey: Keys.screenOverlayEnabled) }
+        didSet {
+            UserDefaults.standard.set(screenOverlayEnabled, forKey: Keys.screenOverlayEnabled)
+        }
     }
 
     var zoomStandingReminderEnabled: Bool {
         didSet {
-            UserDefaults.standard.set(zoomStandingReminderEnabled, forKey: Keys.zoomStandingReminderEnabled)
+            UserDefaults.standard.set(
+                zoomStandingReminderEnabled, forKey: Keys.zoomStandingReminderEnabled)
         }
     }
 
     var eyeBreakIntervalMinutes: Int {
-        didSet { UserDefaults.standard.set(eyeBreakIntervalMinutes, forKey: Keys.eyeBreakIntervalMinutes) }
+        didSet {
+            UserDefaults.standard.set(eyeBreakIntervalMinutes, forKey: Keys.eyeBreakIntervalMinutes)
+        }
     }
 
     var stretchBreakEnabled: Bool {
@@ -71,7 +76,9 @@ class ActivityTracker: ObservableObject {
     }
 
     var postZoomStretchEnabled: Bool {
-        didSet { UserDefaults.standard.set(postZoomStretchEnabled, forKey: Keys.postZoomStretchEnabled) }
+        didSet {
+            UserDefaults.standard.set(postZoomStretchEnabled, forKey: Keys.postZoomStretchEnabled)
+        }
     }
 
     var windDownMinutes: Int {
@@ -154,10 +161,12 @@ class ActivityTracker: ObservableObject {
         screenOverlayEnabled = UserDefaults.standard.bool(forKey: Keys.screenOverlayEnabled)
 
         // Default Zoom standing reminder to disabled if not set
-        zoomStandingReminderEnabled = UserDefaults.standard.bool(forKey: Keys.zoomStandingReminderEnabled)
+        zoomStandingReminderEnabled = UserDefaults.standard.bool(
+            forKey: Keys.zoomStandingReminderEnabled)
 
         // Break reminder settings (0 = disabled)
-        eyeBreakIntervalMinutes = UserDefaults.standard.integer(forKey: Keys.eyeBreakIntervalMinutes)
+        eyeBreakIntervalMinutes = UserDefaults.standard.integer(
+            forKey: Keys.eyeBreakIntervalMinutes)
         stretchBreakEnabled = UserDefaults.standard.bool(forKey: Keys.stretchBreakEnabled)
         postZoomStretchEnabled = UserDefaults.standard.bool(forKey: Keys.postZoomStretchEnabled)
         windDownMinutes = UserDefaults.standard.integer(forKey: Keys.windDownMinutes)
@@ -283,7 +292,8 @@ class ActivityTracker: ObservableObject {
         if activeSeconds >= targetWorkDaySeconds && goalReachedTime == nil {
             goalReachedTime = now
             UserDefaults.standard.set(now, forKey: Keys.goalReachedTime)
-            NotificationService.shared.sendDailyGoalNotification(formattedActiveTime: formattedActiveTime)
+            NotificationService.shared.sendDailyGoalNotification(
+                formattedActiveTime: formattedActiveTime)
             if screenOverlayEnabled {
                 ScreenOverlayController.shared.showOverlay()
             }
@@ -345,7 +355,8 @@ class ActivityTracker: ObservableObject {
         guard SunsetCalculator.shared.hasLocation else { return }
 
         if let minutesUntil = SunsetCalculator.shared.minutesUntilSunset(),
-           minutesUntil <= sunsetAlertMinutes && minutesUntil > 0 {
+            minutesUntil <= sunsetAlertMinutes && minutesUntil > 0
+        {
             sunsetAlertShown = true
             EmojiFlashController.shared.flash(emoji: "🌅")
         }

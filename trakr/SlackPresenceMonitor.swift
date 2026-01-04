@@ -73,7 +73,9 @@ class SlackPresenceMonitor: ObservableObject {
     private init() {
         cookie = UserDefaults.standard.string(forKey: Keys.slackCookie) ?? ""
         token = UserDefaults.standard.string(forKey: Keys.slackToken) ?? ""
-        coworkers = UserDefaults.standard.dictionary(forKey: Keys.slackCoworkers) as? [String: String] ?? [:]
+        coworkers =
+            UserDefaults.standard.dictionary(forKey: Keys.slackCoworkers) as? [String: String]
+            ?? [:]
         isEnabled = UserDefaults.standard.bool(forKey: Keys.slackEnabled)
         // Default to requiring Slack app to be open
         if UserDefaults.standard.object(forKey: Keys.slackRequireApp) == nil {
@@ -121,10 +123,11 @@ class SlackPresenceMonitor: ObservableObject {
     private func startSlackAppMonitoring() {
         // Check immediately
         checkSlackAppState()
-        
+
         // Then check periodically
         slackAppCheckTimer?.invalidate()
-        slackAppCheckTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        slackAppCheckTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) {
+            [weak self] _ in
             self?.checkSlackAppState()
         }
         if let timer = slackAppCheckTimer {
@@ -134,7 +137,7 @@ class SlackPresenceMonitor: ObservableObject {
 
     private func checkSlackAppState() {
         let slackIsRunning = isSlackRunning()
-        
+
         if slackIsRunning && !isConnected {
             print("Slack app detected, connecting WebSocket...")
             connect()
@@ -215,12 +218,13 @@ class SlackPresenceMonitor: ObservableObject {
         let subscribeMessage: [String: Any] = [
             "type": "presence_sub",
             "ids": userIds,
-            "id": messageId
+            "id": messageId,
         ]
         messageId += 1
 
         guard let data = try? JSONSerialization.data(withJSONObject: subscribeMessage),
-              let jsonString = String(data: data, encoding: .utf8) else {
+            let jsonString = String(data: data, encoding: .utf8)
+        else {
             print("Failed to serialize presence_sub message")
             return
         }
@@ -259,8 +263,9 @@ class SlackPresenceMonitor: ObservableObject {
 
     private func handleMessage(_ text: String) {
         guard let data = text.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let type = json["type"] as? String else { return }
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let type = json["type"] as? String
+        else { return }
 
         if type == "presence_change" {
             handlePresenceChange(json)
@@ -289,8 +294,9 @@ class SlackPresenceMonitor: ObservableObject {
 
         // Handle individual user update
         guard let userId = json["user"] as? String,
-              coworkers[userId] != nil,
-              let presence = presence else { return }
+            coworkers[userId] != nil,
+            let presence = presence
+        else { return }
 
         DispatchQueue.main.async {
             if presence == "active" {
@@ -303,7 +309,8 @@ class SlackPresenceMonitor: ObservableObject {
     }
 
     private func updateInitials() {
-        let initials = onlineUsers
+        let initials =
+            onlineUsers
             .compactMap { coworkers[$0]?.first }
             .map { String($0).uppercased() }
             .sorted()
@@ -325,4 +332,3 @@ class SlackPresenceMonitor: ObservableObject {
         }
     }
 }
-

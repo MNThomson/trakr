@@ -57,4 +57,3 @@ class IdleDetector {
         return isInputActive || hasPowerAssertion
     }
 }
-

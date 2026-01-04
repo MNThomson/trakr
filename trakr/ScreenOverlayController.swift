@@ -120,7 +120,8 @@ class ScreenOverlayController {
         window.ignoresMouseEvents = false
         window.collectionBehavior = [.canJoinAllSpaces, .stationary]
 
-        let closeButton = CloseButton(frame: NSRect(x: 0, y: 0, width: buttonSize, height: buttonSize))
+        let closeButton = CloseButton(
+            frame: NSRect(x: 0, y: 0, width: buttonSize, height: buttonSize))
         closeButton.onDismiss = { [weak self] in
             self?.dismissOverlay()
         }
@@ -188,7 +189,8 @@ private class CloseButton: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        let color = isHovered
+        let color =
+            isHovered
             ? NSColor.white.withAlphaComponent(0.9)
             : NSColor.white.withAlphaComponent(0.5)
 

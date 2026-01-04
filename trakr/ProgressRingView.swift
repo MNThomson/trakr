@@ -46,7 +46,9 @@ struct ProgressRingView: View {
                     )
                     .rotationEffect(.degrees(-90))
                     .animation(.easeInOut(duration: 0.3), value: progress)
-                    .shadow(color: isComplete ? Color(nsColor: .systemGreen).opacity(0.6) : .clear, radius: 4)
+                    .shadow(
+                        color: isComplete ? Color(nsColor: .systemGreen).opacity(0.6) : .clear,
+                        radius: 4)
 
                 Text(activeTime)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))

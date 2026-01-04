@@ -1,5 +1,8 @@
 import Foundation
 
+// swiftlint:disable identifier_name
+// Short variable names follow standard NOAA solar position algorithm notation
+
 /// Calculates sunset times using the NOAA solar position algorithm
 class SunsetCalculator {
 
@@ -73,7 +76,8 @@ class SunsetCalculator {
         let jc = (jd - 2451545.0) / 36525.0
 
         // Geometric Mean Longitude of Sun (degrees)
-        let l0 = (280.46646 + jc * (36000.76983 + 0.0003032 * jc)).truncatingRemainder(dividingBy: 360)
+        let l0 = (280.46646 + jc * (36000.76983 + 0.0003032 * jc)).truncatingRemainder(
+            dividingBy: 360)
 
         // Geometric Mean Anomaly of Sun (degrees)
         let m = 357.52911 + jc * (35999.05029 - 0.0001537 * jc)
@@ -83,9 +87,9 @@ class SunsetCalculator {
 
         // Sun's Equation of Center
         let mRad = m * .pi / 180
-        let c = sin(mRad) * (1.914602 - jc * (0.004817 + 0.000014 * jc)) +
-                sin(2 * mRad) * (0.019993 - 0.000101 * jc) +
-                sin(3 * mRad) * 0.000289
+        let c =
+            sin(mRad) * (1.914602 - jc * (0.004817 + 0.000014 * jc)) + sin(2 * mRad)
+            * (0.019993 - 0.000101 * jc) + sin(3 * mRad) * 0.000289
 
         // Sun's True Longitude
         let sunLong = l0 + c
@@ -95,7 +99,8 @@ class SunsetCalculator {
         let lambda = sunLong - 0.00569 - 0.00478 * sin(omega * .pi / 180)
 
         // Mean Obliquity of the Ecliptic
-        let obliq0 = 23 + (26 + ((21.448 - jc * (46.8150 + jc * (0.00059 - jc * 0.001813)))) / 60) / 60
+        let obliq0 =
+            23 + (26 + ((21.448 - jc * (46.8150 + jc * (0.00059 - jc * 0.001813)))) / 60) / 60
 
         // Corrected Obliquity
         let obliq = obliq0 + 0.00256 * cos(omega * .pi / 180)
@@ -106,11 +111,10 @@ class SunsetCalculator {
         // Equation of Time (minutes)
         let y = tan(obliq * .pi / 360) * tan(obliq * .pi / 360)
         let l0Rad = l0 * .pi / 180
-        let eqTime = 4 * (y * sin(2 * l0Rad) -
-                         2 * e * sin(mRad) +
-                         4 * e * y * sin(mRad) * cos(2 * l0Rad) -
-                         0.5 * y * y * sin(4 * l0Rad) -
-                         1.25 * e * e * sin(2 * mRad)) * 180 / .pi
+        let eqTime =
+            4
+            * (y * sin(2 * l0Rad) - 2 * e * sin(mRad) + 4 * e * y * sin(mRad) * cos(2 * l0Rad) - 0.5
+                * y * y * sin(4 * l0Rad) - 1.25 * e * e * sin(2 * mRad)) * 180 / .pi
 
         // Hour Angle at Sunset (degrees)
         // Using -0.833 degrees to account for atmospheric refraction
@@ -156,9 +160,9 @@ class SunsetCalculator {
         let a = Int(Double(y) / 100)
         let b = 2 - a + Int(Double(a) / 4)
 
-        return Double(Int(365.25 * Double(y + 4716))) +
-               Double(Int(30.6001 * Double(m + 1))) +
-               Double(day) + Double(b) - 1524.5
+        return Double(Int(365.25 * Double(y + 4716))) + Double(Int(30.6001 * Double(m + 1)))
+            + Double(day) + Double(b) - 1524.5
     }
 }
 
+// swiftlint:enable identifier_name

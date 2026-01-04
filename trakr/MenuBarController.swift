@@ -86,6 +86,13 @@ class MenuBarController {
         targetItem.submenu = targetSubmenu
         settingsSubmenu.addItem(targetItem)
 
+        // Screen Overlay toggle
+        settingsSubmenu.addItem(.separator())
+        let overlayItem = createMenuItem(
+            title: "Screen Overlay on Goal", action: #selector(toggleScreenOverlay))
+        overlayItem.state = ActivityTracker.shared.screenOverlayEnabled ? .on : .off
+        settingsSubmenu.addItem(overlayItem)
+
         updateSettingsMenuStates()
         menu.addItem(settingsMenuItem)
     }
@@ -329,6 +336,16 @@ class MenuBarController {
 
     @objc private func togglePause() {
         ActivityTracker.shared.togglePause()
+    }
+
+    @objc private func toggleScreenOverlay(_ sender: NSMenuItem) {
+        ActivityTracker.shared.screenOverlayEnabled.toggle()
+        sender.state = ActivityTracker.shared.screenOverlayEnabled ? .on : .off
+
+        // If disabled, hide any current overlay
+        if !ActivityTracker.shared.screenOverlayEnabled {
+            ScreenOverlayController.shared.hideOverlayPermanently()
+        }
     }
 
     @objc private func setIdleThreshold(_ sender: NSMenuItem) {

@@ -14,6 +14,7 @@ class ActivityTracker: ObservableObject {
         static let idleThreshold = "idleThreshold"
         static let targetWorkDaySeconds = "targetWorkDaySeconds"
         static let goalReachedTime = "goalReachedTime"
+        static let screenOverlayEnabled = "screenOverlayEnabled"
     }
 
     private enum Defaults {
@@ -50,6 +51,10 @@ class ActivityTracker: ObservableObject {
 
     var idleThreshold: TimeInterval {
         didSet { UserDefaults.standard.set(idleThreshold, forKey: Keys.idleThreshold) }
+    }
+
+    var screenOverlayEnabled: Bool {
+        didSet { UserDefaults.standard.set(screenOverlayEnabled, forKey: Keys.screenOverlayEnabled) }
     }
 
     private var timer: Timer?
@@ -115,6 +120,13 @@ class ActivityTracker: ObservableObject {
         let savedTargetSeconds = UserDefaults.standard.integer(forKey: Keys.targetWorkDaySeconds)
         targetWorkDaySeconds =
             savedTargetSeconds > 0 ? savedTargetSeconds : Defaults.targetWorkDaySeconds
+
+        // Default to enabled if not set
+        if UserDefaults.standard.object(forKey: Keys.screenOverlayEnabled) == nil {
+            screenOverlayEnabled = true
+        } else {
+            screenOverlayEnabled = UserDefaults.standard.bool(forKey: Keys.screenOverlayEnabled)
+        }
 
         loadState()
         requestNotificationPermissions()
@@ -203,6 +215,9 @@ class ActivityTracker: ObservableObject {
             goalReachedTime = now
             UserDefaults.standard.set(now, forKey: Keys.goalReachedTime)
             sendDailyGoalNotification()
+            if screenOverlayEnabled {
+                ScreenOverlayController.shared.showOverlay()
+            }
         }
 
         if activeSeconds % Defaults.saveInterval == 0 {
@@ -252,7 +267,7 @@ class ActivityTracker: ObservableObject {
     // MARK: - Notifications
 
     private func requestNotificationPermissions() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) {
             _, error in
             if let error = error {
                 print("Notification permission error: \(error)")
@@ -264,7 +279,8 @@ class ActivityTracker: ObservableObject {
         let content = UNMutableNotificationContent()
         content.title = "🎉 Daily Goal Reached!"
         content.body = "You've completed \(formattedActiveTime) of work today. Great job!"
-        content.sound = .default
+        content.sound = .defaultCritical
+        content.interruptionLevel = .timeSensitive
 
         let request = UNNotificationRequest(
             identifier: "dailyGoalReached", content: content, trigger: nil)

@@ -42,7 +42,8 @@ class MenuBarController {
     private func setupStatusButton() {
         guard let button = statusItem.button else { return }
         button.image = NSImage(
-            systemSymbolName: "clock",
+            systemSymbolName: "cellularbars",
+            variableValue: 0.0,
             accessibilityDescription: "Activity Timer"
         )
         button.image?.isTemplate = true
@@ -138,6 +139,11 @@ class MenuBarController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateMenuItemTitle() }
             .store(in: &cancellables)
+
+        ActivityTracker.shared.$isCurrentlyActive
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateStatusIcon() }
+            .store(in: &cancellables)
     }
 
     // MARK: - UI Updates
@@ -151,6 +157,30 @@ class MenuBarController {
 
     private func updateMenuItemTitle() {
         infoMenuItem.title = formattedInfoLine()
+        updateStatusIcon()
+    }
+
+    private func updateStatusIcon() {
+        guard let button = statusItem.button else { return }
+
+        let symbolName: String
+        let variableValue: Double
+
+        if ActivityTracker.shared.isCurrentlyActive {
+            let progress = min(1.0, Double(ActivityTracker.shared.activeSeconds) / Double(ActivityTracker.shared.targetWorkDaySeconds))
+            symbolName = "cellularbars"
+            variableValue = floor(progress * 4) / 4
+        } else {
+            symbolName = "hourglass"
+            variableValue = 0.0
+        }
+
+        button.image = NSImage(
+            systemSymbolName: symbolName,
+            variableValue: variableValue,
+            accessibilityDescription: "Activity Timer"
+        )
+        button.image?.isTemplate = true
     }
 
     private func updateSettingsMenuStates() {

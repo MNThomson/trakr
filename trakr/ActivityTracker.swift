@@ -1,5 +1,7 @@
 import Foundation
+import IOKit.pwr_mgt
 import Quartz
+import UserNotifications
 
 class ActivityTracker: ObservableObject {
 
@@ -11,6 +13,7 @@ class ActivityTracker: ObservableObject {
         static let workStartTime = "workStartTime"
         static let idleThreshold = "idleThreshold"
         static let targetWorkDaySeconds = "targetWorkDaySeconds"
+        static let dailyGoalNotificationSent = "dailyGoalNotificationSent"
     }
 
     private enum Defaults {
@@ -47,6 +50,7 @@ class ActivityTracker: ObservableObject {
     }
 
     private var timer: Timer?
+    private var dailyGoalNotificationSent = false
 
     private lazy var timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -83,6 +87,7 @@ class ActivityTracker: ObservableObject {
         targetWorkDaySeconds = savedTargetSeconds > 0 ? savedTargetSeconds : Defaults.targetWorkDaySeconds
 
         loadState()
+        requestNotificationPermissions()
         startTracking()
     }
 
@@ -111,6 +116,7 @@ class ActivityTracker: ObservableObject {
         if isSameWorkDay(lastDate, as: Date()) {
             activeSeconds = UserDefaults.standard.integer(forKey: Keys.activeSeconds)
             workStartTime = UserDefaults.standard.object(forKey: Keys.workStartTime) as? Date
+            dailyGoalNotificationSent = UserDefaults.standard.bool(forKey: Keys.dailyGoalNotificationSent)
         } else {
             resetForNewWorkDay()
         }
@@ -119,10 +125,12 @@ class ActivityTracker: ObservableObject {
     private func resetToInitialState() {
         activeSeconds = 0
         workStartTime = nil
+        dailyGoalNotificationSent = false
     }
 
     private func resetForNewWorkDay() {
         resetToInitialState()
+        UserDefaults.standard.set(false, forKey: Keys.dailyGoalNotificationSent)
         saveState()
     }
 
@@ -143,7 +151,9 @@ class ActivityTracker: ObservableObject {
             resetForNewWorkDay()
         }
 
-        isCurrentlyActive = getSystemIdleTime() < idleThreshold
+        let isInputActive = getSystemIdleTime() < idleThreshold
+        let hasPowerAssertion = hasActivePowerAssertions()
+        isCurrentlyActive = isInputActive || hasPowerAssertion
         guard isCurrentlyActive else { return }
 
         if workStartTime == nil && isAfterWorkDayStart(now) {
@@ -152,6 +162,10 @@ class ActivityTracker: ObservableObject {
         }
 
         activeSeconds += 1
+
+        if activeSeconds >= targetWorkDaySeconds && !dailyGoalNotificationSent {
+            sendDailyGoalNotification()
+        }
 
         if activeSeconds % Defaults.saveInterval == 0 {
             saveState()
@@ -162,6 +176,23 @@ class ActivityTracker: ObservableObject {
         Self.trackedEventTypes
             .map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }
             .min() ?? .infinity
+    }
+
+    private func hasActivePowerAssertions() -> Bool {
+        var assertionsStatus: Unmanaged<CFDictionary>?
+        guard IOPMCopyAssertionsStatus(&assertionsStatus) == kIOReturnSuccess,
+              let dict = assertionsStatus?.takeRetainedValue() as? [String: Int] else {
+            return false
+        }
+
+        // PreventUserIdleDisplaySleep is created by apps like Zoom, video players
+        // (PreventUserIdleSystemSleep is always active from powerd when display is on, so we skip it)
+        let activeTypes = [
+            "PreventUserIdleDisplaySleep",
+            "NoDisplaySleepAssertion"
+        ]
+
+        return activeTypes.contains { dict[$0] ?? 0 > 0 }
     }
 
     // MARK: - Work Day Logic
@@ -175,5 +206,35 @@ class ActivityTracker: ObservableObject {
 
     private func isAfterWorkDayStart(_ date: Date) -> Bool {
         Calendar.current.component(.hour, from: date) >= Defaults.workDayStartHour
+    }
+
+    // MARK: - Notifications
+
+    private func requestNotificationPermissions() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, error in
+            if let error = error {
+                print("Notification permission error: \(error)")
+            }
+        }
+    }
+
+    private func sendDailyGoalNotification() {
+        guard !dailyGoalNotificationSent else { return }
+
+        dailyGoalNotificationSent = true
+        UserDefaults.standard.set(true, forKey: Keys.dailyGoalNotificationSent)
+
+        let content = UNMutableNotificationContent()
+        content.title = "🎉 Daily Goal Reached!"
+        content.body = "You've completed \(formattedActiveTime) of work today. Great job!"
+        content.sound = .default
+
+        let request = UNNotificationRequest(identifier: "dailyGoalReached", content: content, trigger: nil)
+
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Failed to send notification: \(error)")
+            }
+        }
     }
 }

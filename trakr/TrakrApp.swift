@@ -1,6 +1,6 @@
-import SwiftUI
 import AppKit
 import ServiceManagement
+import SwiftUI
 
 @main
 struct TrakrApp: App {

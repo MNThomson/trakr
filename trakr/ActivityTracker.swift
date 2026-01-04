@@ -27,7 +27,7 @@ class ActivityTracker: ObservableObject {
         .mouseMoved,
         .keyDown,
         .leftMouseDown,
-        .scrollWheel
+        .scrollWheel,
     ]
 
     // MARK: - Singleton
@@ -40,7 +40,9 @@ class ActivityTracker: ObservableObject {
     @Published private(set) var workStartTime: Date?
     @Published private(set) var isCurrentlyActive: Bool = false
     @Published var targetWorkDaySeconds: Int {
-        didSet { UserDefaults.standard.set(targetWorkDaySeconds, forKey: Keys.targetWorkDaySeconds) }
+        didSet {
+            UserDefaults.standard.set(targetWorkDaySeconds, forKey: Keys.targetWorkDaySeconds)
+        }
     }
 
     // MARK: - Properties
@@ -84,7 +86,8 @@ class ActivityTracker: ObservableObject {
         idleThreshold = savedIdleThreshold > 0 ? savedIdleThreshold : Defaults.idleThreshold
 
         let savedTargetSeconds = UserDefaults.standard.integer(forKey: Keys.targetWorkDaySeconds)
-        targetWorkDaySeconds = savedTargetSeconds > 0 ? savedTargetSeconds : Defaults.targetWorkDaySeconds
+        targetWorkDaySeconds =
+            savedTargetSeconds > 0 ? savedTargetSeconds : Defaults.targetWorkDaySeconds
 
         loadState()
         requestNotificationPermissions()
@@ -108,7 +111,8 @@ class ActivityTracker: ObservableObject {
     // MARK: - State Management
 
     private func loadState() {
-        guard let lastDate = UserDefaults.standard.object(forKey: Keys.lastActiveDate) as? Date else {
+        guard let lastDate = UserDefaults.standard.object(forKey: Keys.lastActiveDate) as? Date
+        else {
             resetToInitialState()
             return
         }
@@ -116,7 +120,8 @@ class ActivityTracker: ObservableObject {
         if isSameWorkDay(lastDate, as: Date()) {
             activeSeconds = UserDefaults.standard.integer(forKey: Keys.activeSeconds)
             workStartTime = UserDefaults.standard.object(forKey: Keys.workStartTime) as? Date
-            dailyGoalNotificationSent = UserDefaults.standard.bool(forKey: Keys.dailyGoalNotificationSent)
+            dailyGoalNotificationSent = UserDefaults.standard.bool(
+                forKey: Keys.dailyGoalNotificationSent)
         } else {
             resetForNewWorkDay()
         }
@@ -147,7 +152,8 @@ class ActivityTracker: ObservableObject {
         let now = Date()
 
         if let lastDate = UserDefaults.standard.object(forKey: Keys.lastActiveDate) as? Date,
-           !isSameWorkDay(lastDate, as: now) {
+            !isSameWorkDay(lastDate, as: now)
+        {
             resetForNewWorkDay()
         }
 
@@ -181,7 +187,8 @@ class ActivityTracker: ObservableObject {
     private func hasActivePowerAssertions() -> Bool {
         var assertionsStatus: Unmanaged<CFDictionary>?
         guard IOPMCopyAssertionsStatus(&assertionsStatus) == kIOReturnSuccess,
-              let dict = assertionsStatus?.takeRetainedValue() as? [String: Int] else {
+            let dict = assertionsStatus?.takeRetainedValue() as? [String: Int]
+        else {
             return false
         }
 
@@ -189,7 +196,7 @@ class ActivityTracker: ObservableObject {
         // (PreventUserIdleSystemSleep is always active from powerd when display is on, so we skip it)
         let activeTypes = [
             "PreventUserIdleDisplaySleep",
-            "NoDisplaySleepAssertion"
+            "NoDisplaySleepAssertion",
         ]
 
         return activeTypes.contains { dict[$0] ?? 0 > 0 }
@@ -199,8 +206,10 @@ class ActivityTracker: ObservableObject {
 
     private func isSameWorkDay(_ date1: Date, as date2: Date) -> Bool {
         let calendar = Calendar.current
-        let adjusted1 = calendar.date(byAdding: .hour, value: -Defaults.workDayStartHour, to: date1)!
-        let adjusted2 = calendar.date(byAdding: .hour, value: -Defaults.workDayStartHour, to: date2)!
+        let adjusted1 = calendar.date(
+            byAdding: .hour, value: -Defaults.workDayStartHour, to: date1)!
+        let adjusted2 = calendar.date(
+            byAdding: .hour, value: -Defaults.workDayStartHour, to: date2)!
         return calendar.isDate(adjusted1, inSameDayAs: adjusted2)
     }
 
@@ -211,7 +220,8 @@ class ActivityTracker: ObservableObject {
     // MARK: - Notifications
 
     private func requestNotificationPermissions() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, error in
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) {
+            _, error in
             if let error = error {
                 print("Notification permission error: \(error)")
             }
@@ -229,7 +239,8 @@ class ActivityTracker: ObservableObject {
         content.body = "You've completed \(formattedActiveTime) of work today. Great job!"
         content.sound = .default
 
-        let request = UNNotificationRequest(identifier: "dailyGoalReached", content: content, trigger: nil)
+        let request = UNNotificationRequest(
+            identifier: "dailyGoalReached", content: content, trigger: nil)
 
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {

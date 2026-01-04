@@ -15,7 +15,7 @@ class MenuBarController {
     private let presetDurations = [
         (title: "7.5 hours", seconds: 7 * 3600 + 30 * 60),
         (title: "8 hours", seconds: 8 * 3600),
-        (title: "8.5 hours", seconds: 8 * 3600 + 30 * 60)
+        (title: "8.5 hours", seconds: 8 * 3600 + 30 * 60),
     ]
 
     private let presetIdleThresholds = [60, 120, 180, 300, 600]
@@ -95,7 +95,8 @@ class MenuBarController {
         }
 
         submenu.addItem(.separator())
-        submenu.addItem(createMenuItem(title: "Custom...", action: #selector(showCustomIdleThresholdInput)))
+        submenu.addItem(
+            createMenuItem(title: "Custom...", action: #selector(showCustomIdleThresholdInput)))
 
         return submenu
     }
@@ -105,19 +106,23 @@ class MenuBarController {
         let currentValue = ActivityTracker.shared.targetWorkDaySeconds
 
         for preset in presetDurations {
-            let item = createMenuItem(title: preset.title, action: #selector(setTargetWorkDayDuration(_:)))
+            let item = createMenuItem(
+                title: preset.title, action: #selector(setTargetWorkDayDuration(_:)))
             item.tag = preset.seconds
             item.state = preset.seconds == currentValue ? .on : .off
             submenu.addItem(item)
         }
 
         submenu.addItem(.separator())
-        submenu.addItem(createMenuItem(title: "Custom...", action: #selector(showCustomDurationInput)))
+        submenu.addItem(
+            createMenuItem(title: "Custom...", action: #selector(showCustomDurationInput)))
 
         return submenu
     }
 
-    private func createMenuItem(title: String, action: Selector, keyEquivalent: String = "") -> NSMenuItem {
+    private func createMenuItem(title: String, action: Selector, keyEquivalent: String = "")
+        -> NSMenuItem
+    {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
         item.target = self
         return item
@@ -153,11 +158,11 @@ class MenuBarController {
 
         let iconAttrs: [NSAttributedString.Key: Any] = [
             .foregroundColor: NSColor.secondaryLabelColor,
-            .font: font
+            .font: font,
         ]
         let valueAttrs: [NSAttributedString.Key: Any] = [
             .foregroundColor: NSColor.labelColor,
-            .font: font
+            .font: font,
         ]
 
         result.append(NSAttributedString(string: icon + " ", attributes: iconAttrs))
@@ -194,7 +199,7 @@ class MenuBarController {
             centerLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
 
             rightLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
-            rightLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor)
+            rightLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
         ])
 
         return container
@@ -230,7 +235,10 @@ class MenuBarController {
         let variableValue: Double
 
         if ActivityTracker.shared.isCurrentlyActive {
-            let progress = min(1.0, Double(ActivityTracker.shared.activeSeconds) / Double(ActivityTracker.shared.targetWorkDaySeconds))
+            let progress = min(
+                1.0,
+                Double(ActivityTracker.shared.activeSeconds)
+                    / Double(ActivityTracker.shared.targetWorkDaySeconds))
             symbolName = "cellularbars"
             variableValue = floor(progress * 4) / 4
         } else {
@@ -282,11 +290,13 @@ class MenuBarController {
         let isPreset = presets.contains(currentValue)
 
         // Remove existing custom value items
-        submenu.items
+        let itemsToRemove = submenu.items
             .enumerated()
             .reversed()
             .filter { $0.element.tag == -1 && $0.element.action == action }
-            .forEach { submenu.removeItem(at: $0.offset) }
+        for item in itemsToRemove {
+            submenu.removeItem(at: item.offset)
+        }
 
         // Update preset checkmarks
         for item in submenu.items where presets.contains(item.tag) {
@@ -359,12 +369,13 @@ class MenuBarController {
             title: "Set Target Work Day",
             message: "Enter duration in hours (e.g., 7.5):",
             currentValue: String(format: "%.1f", currentHours),
-            validate: { Double($0).flatMap { $0 > 0 && $0 <= 24 ? Int($0 * 3600) : nil } }
-        ) { [weak self] seconds in
-            ActivityTracker.shared.targetWorkDaySeconds = seconds
-            self?.updateSettingsMenuStates()
-            self?.updateMenuItemTitle()
-        }
+            validate: { Double($0).flatMap { $0 > 0 && $0 <= 24 ? Int($0 * 3600) : nil } },
+            onConfirm: { [weak self] seconds in
+                ActivityTracker.shared.targetWorkDaySeconds = seconds
+                self?.updateSettingsMenuStates()
+                self?.updateMenuItemTitle()
+            }
+        )
     }
 
     @objc private func showCustomIdleThresholdInput() {
@@ -373,11 +384,12 @@ class MenuBarController {
             title: "Set Idle Threshold",
             message: "Enter threshold in seconds (e.g., 90):",
             currentValue: String(currentSeconds),
-            validate: { Int($0).flatMap { $0 > 0 && $0 <= 3600 ? $0 : nil } }
-        ) { [weak self] seconds in
-            ActivityTracker.shared.idleThreshold = TimeInterval(seconds)
-            self?.updateSettingsMenuStates()
-        }
+            validate: { Int($0).flatMap { $0 > 0 && $0 <= 3600 ? $0 : nil } },
+            onConfirm: { [weak self] seconds in
+                ActivityTracker.shared.idleThreshold = TimeInterval(seconds)
+                self?.updateSettingsMenuStates()
+            }
+        )
     }
 
     private func showCustomInput(
@@ -402,7 +414,8 @@ class MenuBarController {
         alert.window.initialFirstResponder = inputField
 
         guard alert.runModal() == .alertFirstButtonReturn,
-              let value = validate(inputField.stringValue) else { return }
+            let value = validate(inputField.stringValue)
+        else { return }
 
         onConfirm(value)
     }

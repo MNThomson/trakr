@@ -13,13 +13,10 @@ class ActivityTracker: ObservableObject {
         static let goalReachedTime = "goalReachedTime"
         static let screenOverlayEnabled = "screenOverlayEnabled"
         static let zoomStandingReminderEnabled = "zoomStandingReminderEnabled"
-        static let eyeBreakEnabled = "eyeBreakEnabled"
         static let eyeBreakIntervalMinutes = "eyeBreakIntervalMinutes"
         static let stretchBreakEnabled = "stretchBreakEnabled"
         static let postZoomStretchEnabled = "postZoomStretchEnabled"
-        static let windDownEnabled = "windDownEnabled"
         static let windDownMinutes = "windDownMinutes"
-        static let sunsetAlertEnabled = "sunsetAlertEnabled"
         static let sunsetAlertMinutes = "sunsetAlertMinutes"
     }
 
@@ -65,10 +62,6 @@ class ActivityTracker: ObservableObject {
         }
     }
 
-    var eyeBreakEnabled: Bool {
-        didSet { UserDefaults.standard.set(eyeBreakEnabled, forKey: Keys.eyeBreakEnabled) }
-    }
-
     var eyeBreakIntervalMinutes: Int {
         didSet { UserDefaults.standard.set(eyeBreakIntervalMinutes, forKey: Keys.eyeBreakIntervalMinutes) }
     }
@@ -81,16 +74,8 @@ class ActivityTracker: ObservableObject {
         didSet { UserDefaults.standard.set(postZoomStretchEnabled, forKey: Keys.postZoomStretchEnabled) }
     }
 
-    var windDownEnabled: Bool {
-        didSet { UserDefaults.standard.set(windDownEnabled, forKey: Keys.windDownEnabled) }
-    }
-
     var windDownMinutes: Int {
         didSet { UserDefaults.standard.set(windDownMinutes, forKey: Keys.windDownMinutes) }
-    }
-
-    var sunsetAlertEnabled: Bool {
-        didSet { UserDefaults.standard.set(sunsetAlertEnabled, forKey: Keys.sunsetAlertEnabled) }
     }
 
     var sunsetAlertMinutes: Int {
@@ -171,20 +156,14 @@ class ActivityTracker: ObservableObject {
         // Default Zoom standing reminder to disabled if not set
         zoomStandingReminderEnabled = UserDefaults.standard.bool(forKey: Keys.zoomStandingReminderEnabled)
 
-        // Break reminder settings
-        eyeBreakEnabled = UserDefaults.standard.bool(forKey: Keys.eyeBreakEnabled)
-        let savedEyeBreakInterval = UserDefaults.standard.integer(forKey: Keys.eyeBreakIntervalMinutes)
-        eyeBreakIntervalMinutes = savedEyeBreakInterval > 0 ? savedEyeBreakInterval : Defaults.eyeBreakIntervalMinutes
+        // Break reminder settings (0 = disabled)
+        eyeBreakIntervalMinutes = UserDefaults.standard.integer(forKey: Keys.eyeBreakIntervalMinutes)
         stretchBreakEnabled = UserDefaults.standard.bool(forKey: Keys.stretchBreakEnabled)
         postZoomStretchEnabled = UserDefaults.standard.bool(forKey: Keys.postZoomStretchEnabled)
-        windDownEnabled = UserDefaults.standard.bool(forKey: Keys.windDownEnabled)
-        let savedWindDownMinutes = UserDefaults.standard.integer(forKey: Keys.windDownMinutes)
-        windDownMinutes = savedWindDownMinutes > 0 ? savedWindDownMinutes : Defaults.windDownMinutes
+        windDownMinutes = UserDefaults.standard.integer(forKey: Keys.windDownMinutes)
 
-        // Sunset alert settings
-        sunsetAlertEnabled = UserDefaults.standard.bool(forKey: Keys.sunsetAlertEnabled)
-        let savedSunsetAlertMinutes = UserDefaults.standard.integer(forKey: Keys.sunsetAlertMinutes)
-        sunsetAlertMinutes = savedSunsetAlertMinutes > 0 ? savedSunsetAlertMinutes : Defaults.sunsetAlertMinutes
+        // Sunset alert settings (0 = disabled)
+        sunsetAlertMinutes = UserDefaults.standard.integer(forKey: Keys.sunsetAlertMinutes)
 
         loadState()
         setupZoomDetector()
@@ -318,7 +297,7 @@ class ActivityTracker: ObservableObject {
     // MARK: - Break Reminders
 
     private func checkEyeBreak() {
-        guard eyeBreakEnabled else {
+        guard eyeBreakIntervalMinutes > 0 else {
             secondsSinceLastEyeBreak = 0
             return
         }
@@ -350,7 +329,7 @@ class ActivityTracker: ObservableObject {
     }
 
     private func checkWindDown() {
-        guard windDownEnabled && !windDownShown else { return }
+        guard windDownMinutes > 0 && !windDownShown else { return }
 
         let remainingSeconds = targetWorkDaySeconds - activeSeconds
         let windDownSeconds = windDownMinutes * 60
@@ -362,7 +341,7 @@ class ActivityTracker: ObservableObject {
     }
 
     private func checkSunsetAlert() {
-        guard sunsetAlertEnabled && !sunsetAlertShown else { return }
+        guard sunsetAlertMinutes > 0 && !sunsetAlertShown else { return }
         guard SunsetCalculator.shared.hasLocation else { return }
 
         if let minutesUntil = SunsetCalculator.shared.minutesUntilSunset(),

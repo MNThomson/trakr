@@ -165,16 +165,11 @@ class MenuBarController {
     }
 
     private func setupBreakRemindersMenu() {
-        // Eye Break toggle with interval submenu
-        let eyeBreakItem = createMenuItem(
-            title: "Eye Break (20-20-20)", action: #selector(toggleEyeBreak))
-        eyeBreakItem.state = ActivityTracker.shared.eyeBreakEnabled ? .on : .off
-        settingsSubmenu.addItem(eyeBreakItem)
-
-        // Eye Break Interval submenu
+        // Eye Break Interval submenu (Disabled = 0)
         let eyeBreakIntervalSubmenu = createEyeBreakIntervalSubmenu()
-        let eyeBreakIntervalItem = NSMenuItem(title: "Eye Break Interval", action: nil, keyEquivalent: "")
+        let eyeBreakIntervalItem = NSMenuItem(title: "Eye Break (20-20-20)", action: nil, keyEquivalent: "")
         eyeBreakIntervalItem.submenu = eyeBreakIntervalSubmenu
+        eyeBreakIntervalItem.state = ActivityTracker.shared.eyeBreakIntervalMinutes > 0 ? .on : .off
         settingsSubmenu.addItem(eyeBreakIntervalItem)
 
         // Stretch Break toggle (hourly at :55)
@@ -189,28 +184,18 @@ class MenuBarController {
         postZoomStretchItem.state = ActivityTracker.shared.postZoomStretchEnabled ? .on : .off
         settingsSubmenu.addItem(postZoomStretchItem)
 
-        // End-of-Day Wind Down toggle
-        let windDownItem = createMenuItem(
-            title: "End-of-Day Wind Down", action: #selector(toggleWindDown))
-        windDownItem.state = ActivityTracker.shared.windDownEnabled ? .on : .off
-        settingsSubmenu.addItem(windDownItem)
-
-        // Wind Down Timing submenu
+        // Wind Down Timing submenu (Disabled = 0)
         let windDownTimingSubmenu = createWindDownTimingSubmenu()
-        let windDownTimingItem = NSMenuItem(title: "Wind Down Timing", action: nil, keyEquivalent: "")
+        let windDownTimingItem = NSMenuItem(title: "End-of-Day Wind Down", action: nil, keyEquivalent: "")
         windDownTimingItem.submenu = windDownTimingSubmenu
+        windDownTimingItem.state = ActivityTracker.shared.windDownMinutes > 0 ? .on : .off
         settingsSubmenu.addItem(windDownTimingItem)
 
-        // Sunset Alert toggle
-        let sunsetAlertItem = createMenuItem(
-            title: "Sunset Alert", action: #selector(toggleSunsetAlert))
-        sunsetAlertItem.state = ActivityTracker.shared.sunsetAlertEnabled ? .on : .off
-        settingsSubmenu.addItem(sunsetAlertItem)
-
-        // Sunset Alert Timing submenu
+        // Sunset Alert Timing submenu (Disabled = 0)
         let sunsetAlertTimingSubmenu = createSunsetAlertTimingSubmenu()
-        let sunsetAlertTimingItem = NSMenuItem(title: "Sunset Alert Timing", action: nil, keyEquivalent: "")
+        let sunsetAlertTimingItem = NSMenuItem(title: "Sunset Alert", action: nil, keyEquivalent: "")
         sunsetAlertTimingItem.submenu = sunsetAlertTimingSubmenu
+        sunsetAlertTimingItem.state = ActivityTracker.shared.sunsetAlertMinutes > 0 ? .on : .off
         settingsSubmenu.addItem(sunsetAlertTimingItem)
 
         // Set Location for sunset calculation
@@ -221,6 +206,14 @@ class MenuBarController {
     private func createEyeBreakIntervalSubmenu() -> NSMenu {
         let submenu = NSMenu()
         let currentValue = ActivityTracker.shared.eyeBreakIntervalMinutes
+
+        // Disabled option (value = 0)
+        let disabledItem = createMenuItem(title: "Disabled", action: #selector(setEyeBreakInterval(_:)))
+        disabledItem.tag = 0
+        disabledItem.state = currentValue == 0 ? .on : .off
+        submenu.addItem(disabledItem)
+
+        submenu.addItem(.separator())
 
         for minutes in presetEyeBreakIntervals {
             let title = "\(minutes) min"
@@ -241,6 +234,14 @@ class MenuBarController {
         let submenu = NSMenu()
         let currentValue = ActivityTracker.shared.windDownMinutes
 
+        // Disabled option (value = 0)
+        let disabledItem = createMenuItem(title: "Disabled", action: #selector(setWindDownTiming(_:)))
+        disabledItem.tag = 0
+        disabledItem.state = currentValue == 0 ? .on : .off
+        submenu.addItem(disabledItem)
+
+        submenu.addItem(.separator())
+
         for minutes in presetWindDownMinutes {
             let title = "\(minutes) min before"
             let item = createMenuItem(title: title, action: #selector(setWindDownTiming(_:)))
@@ -259,6 +260,14 @@ class MenuBarController {
     private func createSunsetAlertTimingSubmenu() -> NSMenu {
         let submenu = NSMenu()
         let currentValue = ActivityTracker.shared.sunsetAlertMinutes
+
+        // Disabled option (value = 0)
+        let disabledItem = createMenuItem(title: "Disabled", action: #selector(setSunsetAlertTiming(_:)))
+        disabledItem.tag = 0
+        disabledItem.state = currentValue == 0 ? .on : .off
+        submenu.addItem(disabledItem)
+
+        submenu.addItem(.separator())
 
         for minutes in presetSunsetAlertMinutes {
             let title = "\(minutes) min before"
@@ -413,10 +422,12 @@ class MenuBarController {
             )
         }
 
-        // Update Eye Break Interval submenu (index 7: after idle, target, separator, overlay, zoom, separator, eye break toggle)
-        if let eyeBreakIntervalSubmenu = settingsSubmenu.item(at: 7)?.submenu {
+        // Update Eye Break Interval submenu (index 6: after idle, target, separator, overlay, zoom, separator)
+        if let eyeBreakItem = settingsSubmenu.item(at: 6),
+           let eyeBreakIntervalSubmenu = eyeBreakItem.submenu {
             let currentMinutes = ActivityTracker.shared.eyeBreakIntervalMinutes
-            updateSubmenuCheckmarks(
+            eyeBreakItem.state = currentMinutes > 0 ? .on : .off
+            updateDurationSubmenuCheckmarks(
                 submenu: eyeBreakIntervalSubmenu,
                 currentValue: currentMinutes,
                 presets: presetEyeBreakIntervals,
@@ -425,10 +436,12 @@ class MenuBarController {
             )
         }
 
-        // Update Wind Down Timing submenu (index 11: after wind down toggle)
-        if let windDownTimingSubmenu = settingsSubmenu.item(at: 11)?.submenu {
+        // Update Wind Down Timing submenu (index 9: after eye break, stretch, post-zoom)
+        if let windDownItem = settingsSubmenu.item(at: 9),
+           let windDownTimingSubmenu = windDownItem.submenu {
             let currentMinutes = ActivityTracker.shared.windDownMinutes
-            updateSubmenuCheckmarks(
+            windDownItem.state = currentMinutes > 0 ? .on : .off
+            updateDurationSubmenuCheckmarks(
                 submenu: windDownTimingSubmenu,
                 currentValue: currentMinutes,
                 presets: presetWindDownMinutes,
@@ -437,10 +450,12 @@ class MenuBarController {
             )
         }
 
-        // Update Sunset Alert Timing submenu (index 13: after sunset alert toggle)
-        if let sunsetAlertTimingSubmenu = settingsSubmenu.item(at: 13)?.submenu {
+        // Update Sunset Alert Timing submenu (index 10: after wind down)
+        if let sunsetAlertItem = settingsSubmenu.item(at: 10),
+           let sunsetAlertTimingSubmenu = sunsetAlertItem.submenu {
             let currentMinutes = ActivityTracker.shared.sunsetAlertMinutes
-            updateSubmenuCheckmarks(
+            sunsetAlertItem.state = currentMinutes > 0 ? .on : .off
+            updateDurationSubmenuCheckmarks(
                 submenu: sunsetAlertTimingSubmenu,
                 currentValue: currentMinutes,
                 presets: presetSunsetAlertMinutes,
@@ -494,6 +509,50 @@ class MenuBarController {
         return 0
     }
 
+    private func updateDurationSubmenuCheckmarks(
+        submenu: NSMenu,
+        currentValue: Int,
+        presets: [Int],
+        formatTitle: (Int) -> String,
+        action: Selector
+    ) {
+        // Handle disabled (0) and preset values
+        let allValues = [0] + presets
+        let isKnownValue = allValues.contains(currentValue)
+
+        // Remove existing custom value items (tag -1)
+        let itemsToRemove = submenu.items
+            .enumerated()
+            .reversed()
+            .filter { $0.element.tag == -1 && $0.element.action == action }
+        for item in itemsToRemove {
+            submenu.removeItem(at: item.offset)
+        }
+
+        // Update checkmarks for all items
+        for item in submenu.items where item.action == action {
+            item.state = item.tag == currentValue ? .on : .off
+        }
+
+        // Add custom value if not a known value
+        guard !isKnownValue && currentValue > 0 else { return }
+
+        let customItem = createMenuItem(title: formatTitle(currentValue), action: action)
+        customItem.tag = -1
+        customItem.state = .on
+        customItem.representedObject = currentValue
+
+        // Find position after the separator (after "Disabled")
+        var insertIndex = submenu.items.count - 2  // Before last separator and Custom...
+        for (index, item) in submenu.items.enumerated() {
+            if item.tag > 0 && item.tag > currentValue {
+                insertIndex = index
+                break
+            }
+        }
+        submenu.insertItem(customItem, at: insertIndex)
+    }
+
     // MARK: - Formatting
 
     private func formatIdleThreshold(_ seconds: Int) -> String {
@@ -539,11 +598,6 @@ class MenuBarController {
         sender.state = ActivityTracker.shared.zoomStandingReminderEnabled ? .on : .off
     }
 
-    @objc private func toggleEyeBreak(_ sender: NSMenuItem) {
-        ActivityTracker.shared.eyeBreakEnabled.toggle()
-        sender.state = ActivityTracker.shared.eyeBreakEnabled ? .on : .off
-    }
-
     @objc private func toggleStretchBreak(_ sender: NSMenuItem) {
         ActivityTracker.shared.stretchBreakEnabled.toggle()
         sender.state = ActivityTracker.shared.stretchBreakEnabled ? .on : .off
@@ -552,11 +606,6 @@ class MenuBarController {
     @objc private func togglePostZoomStretch(_ sender: NSMenuItem) {
         ActivityTracker.shared.postZoomStretchEnabled.toggle()
         sender.state = ActivityTracker.shared.postZoomStretchEnabled ? .on : .off
-    }
-
-    @objc private func toggleWindDown(_ sender: NSMenuItem) {
-        ActivityTracker.shared.windDownEnabled.toggle()
-        sender.state = ActivityTracker.shared.windDownEnabled ? .on : .off
     }
 
     @objc private func setWindDownTiming(_ sender: NSMenuItem) {
@@ -577,11 +626,6 @@ class MenuBarController {
                 self?.updateSettingsMenuStates()
             }
         )
-    }
-
-    @objc private func toggleSunsetAlert(_ sender: NSMenuItem) {
-        ActivityTracker.shared.sunsetAlertEnabled.toggle()
-        sender.state = ActivityTracker.shared.sunsetAlertEnabled ? .on : .off
     }
 
     @objc private func setSunsetAlertTiming(_ sender: NSMenuItem) {

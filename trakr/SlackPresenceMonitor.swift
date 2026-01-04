@@ -11,6 +11,7 @@ class SlackPresenceMonitor: ObservableObject {
         static let slackCoworkers = "slackCoworkers"
         static let slackEnabled = "slackEnabled"
         static let slackRequireApp = "slackRequireApp"
+        static let showMeetingStatus = "slackShowMeetingStatus"
     }
 
     private enum Defaults {
@@ -60,13 +61,24 @@ class SlackPresenceMonitor: ObservableObject {
         }
     }
 
+    var showMeetingStatus: Bool {
+        didSet {
+            UserDefaults.standard.set(showMeetingStatus, forKey: Keys.showMeetingStatus)
+            updateInitials()
+        }
+    }
+
     private var webSocketTask: URLSessionWebSocketTask?
     private var session: URLSession!
     private var reconnectTimer: Timer?
     private var slackAppCheckTimer: Timer?
     private var onlineUsers: Set<String> = []
+    private var usersInMeeting: Set<String> = []
     private var messageId: Int = 1
     private var isConnected: Bool = false
+
+    /// Emojis that indicate the user is in a meeting or huddle
+    private let meetingEmojis = [":calendar:", ":spiral_calendar_pad:", ":date:", ":headphones:"]
 
     // MARK: - Initialization
 
@@ -82,6 +94,12 @@ class SlackPresenceMonitor: ObservableObject {
             requireSlackApp = true
         } else {
             requireSlackApp = UserDefaults.standard.bool(forKey: Keys.slackRequireApp)
+        }
+        // Default to showing meeting status
+        if UserDefaults.standard.object(forKey: Keys.showMeetingStatus) == nil {
+            showMeetingStatus = true
+        } else {
+            showMeetingStatus = UserDefaults.standard.bool(forKey: Keys.showMeetingStatus)
         }
         session = URLSession(configuration: .default)
         setupWakeObserver()
@@ -160,6 +178,7 @@ class SlackPresenceMonitor: ObservableObject {
         webSocketTask = nil
         isConnected = false
         onlineUsers.removeAll()
+        usersInMeeting.removeAll()
         updateInitials()
     }
 
@@ -269,6 +288,8 @@ class SlackPresenceMonitor: ObservableObject {
 
         if type == "presence_change" {
             handlePresenceChange(json)
+        } else if type == "user_status_changed" {
+            handleStatusChange(json)
         }
     }
 
@@ -308,12 +329,39 @@ class SlackPresenceMonitor: ObservableObject {
         }
     }
 
+    private func handleStatusChange(_ json: [String: Any]) {
+        guard let user = json["user"] as? [String: Any],
+            let userId = user["id"] as? String,
+            coworkers[userId] != nil,
+            let profile = user["profile"] as? [String: Any]
+        else { return }
+
+        let statusEmoji = profile["status_emoji"] as? String ?? ""
+        let inMeeting = meetingEmojis.contains(statusEmoji)
+
+        DispatchQueue.main.async {
+            if inMeeting {
+                self.usersInMeeting.insert(userId)
+            } else {
+                self.usersInMeeting.remove(userId)
+            }
+            self.updateInitials()
+        }
+    }
+
     private func updateInitials() {
         let initials =
             onlineUsers
-            .compactMap { coworkers[$0]?.first }
-            .map { String($0).uppercased() }
-            .sorted()
+            .compactMap { userId -> String? in
+                guard let name = coworkers[userId], let first = name.first else { return nil }
+                var initial = String(first).uppercased()
+                // Add underline for users in meetings when showMeetingStatus is enabled
+                if showMeetingStatus && usersInMeeting.contains(userId) {
+                    initial += "\u{0332}"  // Combining low line (underline)
+                }
+                return initial
+            }
+            .sorted { $0.first?.lowercased() ?? "" < $1.first?.lowercased() ?? "" }
             .joined()
         onlineInitials = initials
     }

@@ -290,6 +290,11 @@ class MenuBarController {
         requireAppItem.state = SlackPresenceMonitor.shared.requireSlackApp ? .on : .off
         submenu.addItem(requireAppItem)
 
+        let meetingStatusItem = createMenuItem(
+            title: "Show Meeting Status", action: #selector(toggleShowMeetingStatus))
+        meetingStatusItem.state = SlackPresenceMonitor.shared.showMeetingStatus ? .on : .off
+        submenu.addItem(meetingStatusItem)
+
         submenu.addItem(.separator())
 
         submenu.addItem(createMenuItem(title: "Credentials...", action: #selector(showSlackCredentialsInput)))
@@ -442,6 +447,10 @@ class MenuBarController {
         // Update Require App Open toggle state
         if let requireAppItem = slackSubmenu.item(at: 1) {
             requireAppItem.state = SlackPresenceMonitor.shared.requireSlackApp ? .on : .off
+        }
+        // Update Show Meeting Status toggle state
+        if let meetingStatusItem = slackSubmenu.item(at: 2) {
+            meetingStatusItem.state = SlackPresenceMonitor.shared.showMeetingStatus ? .on : .off
         }
     }
 
@@ -736,6 +745,11 @@ class MenuBarController {
     @objc private func toggleSlackRequireApp(_ sender: NSMenuItem) {
         SlackPresenceMonitor.shared.requireSlackApp.toggle()
         sender.state = SlackPresenceMonitor.shared.requireSlackApp ? .on : .off
+    }
+
+    @objc private func toggleShowMeetingStatus(_ sender: NSMenuItem) {
+        SlackPresenceMonitor.shared.showMeetingStatus.toggle()
+        sender.state = SlackPresenceMonitor.shared.showMeetingStatus ? .on : .off
     }
 
     @objc private func setIdleThreshold(_ sender: NSMenuItem) {

@@ -18,6 +18,7 @@
 		A1000010 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000010 /* NotificationService.swift */; };
 		A1000011 /* SlackPresenceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000011 /* SlackPresenceMonitor.swift */; };
 		A1000012 /* EmojiFlashController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000012 /* EmojiFlashController.swift */; };
+		A1000013 /* SunsetCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000013 /* SunsetCalculator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,6 +34,7 @@
 		A2000010 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		A2000011 /* SlackPresenceMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlackPresenceMonitor.swift; sourceTree = "<group>"; };
 		A2000012 /* EmojiFlashController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiFlashController.swift; sourceTree = "<group>"; };
+		A2000013 /* SunsetCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SunsetCalculator.swift; sourceTree = "<group>"; };
 		A3000001 /* trakr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = trakr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -68,6 +70,7 @@
 				A2000006 /* ProgressRingView.swift */,
 				A2000007 /* ScreenOverlayController.swift */,
 				A2000012 /* EmojiFlashController.swift */,
+				A2000013 /* SunsetCalculator.swift */,
 				A2000004 /* Assets.xcassets */,
 				A2000005 /* Info.plist */,
 			);
@@ -161,6 +164,7 @@
 				A1000005 /* ProgressRingView.swift in Sources */,
 				A1000007 /* ScreenOverlayController.swift in Sources */,
 				A1000012 /* EmojiFlashController.swift in Sources */,
+				A1000013 /* SunsetCalculator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

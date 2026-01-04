@@ -24,6 +24,7 @@ class MenuBarController {
     private let presetIdleThresholds = [60, 120, 180, 300, 600]
     private let presetEyeBreakIntervals = [15, 20, 30]  // minutes
     private let presetWindDownMinutes = [15, 20, 30, 45]  // minutes
+    private let presetSunsetAlertMinutes = [15, 30, 45, 60]  // minutes
 
     // MARK: - Initialization
 
@@ -199,6 +200,22 @@ class MenuBarController {
         let windDownTimingItem = NSMenuItem(title: "Wind Down Timing", action: nil, keyEquivalent: "")
         windDownTimingItem.submenu = windDownTimingSubmenu
         settingsSubmenu.addItem(windDownTimingItem)
+
+        // Sunset Alert toggle
+        let sunsetAlertItem = createMenuItem(
+            title: "Sunset Alert", action: #selector(toggleSunsetAlert))
+        sunsetAlertItem.state = ActivityTracker.shared.sunsetAlertEnabled ? .on : .off
+        settingsSubmenu.addItem(sunsetAlertItem)
+
+        // Sunset Alert Timing submenu
+        let sunsetAlertTimingSubmenu = createSunsetAlertTimingSubmenu()
+        let sunsetAlertTimingItem = NSMenuItem(title: "Sunset Alert Timing", action: nil, keyEquivalent: "")
+        sunsetAlertTimingItem.submenu = sunsetAlertTimingSubmenu
+        settingsSubmenu.addItem(sunsetAlertTimingItem)
+
+        // Set Location for sunset calculation
+        settingsSubmenu.addItem(
+            createMenuItem(title: "Set Location...", action: #selector(showLocationInput)))
     }
 
     private func createEyeBreakIntervalSubmenu() -> NSMenu {
@@ -235,6 +252,25 @@ class MenuBarController {
         submenu.addItem(.separator())
         submenu.addItem(
             createMenuItem(title: "Custom...", action: #selector(showCustomWindDownTimingInput)))
+
+        return submenu
+    }
+
+    private func createSunsetAlertTimingSubmenu() -> NSMenu {
+        let submenu = NSMenu()
+        let currentValue = ActivityTracker.shared.sunsetAlertMinutes
+
+        for minutes in presetSunsetAlertMinutes {
+            let title = "\(minutes) min before"
+            let item = createMenuItem(title: title, action: #selector(setSunsetAlertTiming(_:)))
+            item.tag = minutes
+            item.state = minutes == currentValue ? .on : .off
+            submenu.addItem(item)
+        }
+
+        submenu.addItem(.separator())
+        submenu.addItem(
+            createMenuItem(title: "Custom...", action: #selector(showCustomSunsetAlertTimingInput)))
 
         return submenu
     }
@@ -400,6 +436,18 @@ class MenuBarController {
                 action: #selector(setWindDownTiming(_:))
             )
         }
+
+        // Update Sunset Alert Timing submenu (index 13: after sunset alert toggle)
+        if let sunsetAlertTimingSubmenu = settingsSubmenu.item(at: 13)?.submenu {
+            let currentMinutes = ActivityTracker.shared.sunsetAlertMinutes
+            updateSubmenuCheckmarks(
+                submenu: sunsetAlertTimingSubmenu,
+                currentValue: currentMinutes,
+                presets: presetSunsetAlertMinutes,
+                formatTitle: { "\($0) min before" },
+                action: #selector(setSunsetAlertTiming(_:))
+            )
+        }
     }
 
     private func updateSubmenuCheckmarks(
@@ -529,6 +577,76 @@ class MenuBarController {
                 self?.updateSettingsMenuStates()
             }
         )
+    }
+
+    @objc private func toggleSunsetAlert(_ sender: NSMenuItem) {
+        ActivityTracker.shared.sunsetAlertEnabled.toggle()
+        sender.state = ActivityTracker.shared.sunsetAlertEnabled ? .on : .off
+    }
+
+    @objc private func setSunsetAlertTiming(_ sender: NSMenuItem) {
+        let minutes = sender.tag == -1 ? (sender.representedObject as? Int ?? 30) : sender.tag
+        ActivityTracker.shared.sunsetAlertMinutes = minutes
+        updateSettingsMenuStates()
+    }
+
+    @objc private func showCustomSunsetAlertTimingInput() {
+        let currentMinutes = ActivityTracker.shared.sunsetAlertMinutes
+        showCustomInput(
+            title: "Set Sunset Alert Timing",
+            message: "Enter minutes before sunset to show alert:",
+            currentValue: String(currentMinutes),
+            validate: { Int($0).flatMap { $0 > 0 && $0 <= 180 ? $0 : nil } },
+            onConfirm: { [weak self] minutes in
+                ActivityTracker.shared.sunsetAlertMinutes = minutes
+                self?.updateSettingsMenuStates()
+            }
+        )
+    }
+
+    @objc private func showLocationInput() {
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = "Set Location"
+        alert.informativeText = "Enter coordinates for sunset calculation:"
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+
+        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: 250, height: 70))
+
+        let latLabel = NSTextField(labelWithString: "Latitude:")
+        latLabel.frame = NSRect(x: 0, y: 46, width: 70, height: 17)
+
+        let latField = NSTextField(frame: NSRect(x: 75, y: 44, width: 175, height: 22))
+        latField.stringValue = String(format: "%.4f", SunsetCalculator.shared.latitude)
+        latField.placeholderString = "e.g., 37.7749"
+
+        let lonLabel = NSTextField(labelWithString: "Longitude:")
+        lonLabel.frame = NSRect(x: 0, y: 14, width: 70, height: 17)
+
+        let lonField = NSTextField(frame: NSRect(x: 75, y: 12, width: 175, height: 22))
+        lonField.stringValue = String(format: "%.4f", SunsetCalculator.shared.longitude)
+        lonField.placeholderString = "e.g., -122.4194"
+
+        containerView.addSubview(latLabel)
+        containerView.addSubview(latField)
+        containerView.addSubview(lonLabel)
+        containerView.addSubview(lonField)
+
+        alert.accessoryView = containerView
+        alert.window.initialFirstResponder = latField
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        guard let lat = Double(latField.stringValue.trimmingCharacters(in: .whitespaces)),
+              let lon = Double(lonField.stringValue.trimmingCharacters(in: .whitespaces)),
+              lat >= -90 && lat <= 90,
+              lon >= -180 && lon <= 180
+        else { return }
+
+        SunsetCalculator.shared.latitude = lat
+        SunsetCalculator.shared.longitude = lon
     }
 
     @objc private func setEyeBreakInterval(_ sender: NSMenuItem) {

@@ -324,6 +324,9 @@ class MenuBarController {
         validate: (String) -> Int?,
         onConfirm: @escaping (Int) -> Void
     ) {
+        // Activate the app to ensure the alert gets focus (important for menu bar apps)
+        NSApp.activate(ignoringOtherApps: true)
+
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message

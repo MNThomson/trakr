@@ -8,14 +8,24 @@ class MenuBarController {
     private var statusItem: NSStatusItem
     private var menu: NSMenu
     private var infoMenuItem: NSMenuItem
+    private var settingsSubmenu: NSMenu
     private var cancellables = Set<AnyCancellable>()
     private var updateTimer: Timer?
+
+    private let presetDurations = [
+        (title: "7.5 hours", seconds: 7 * 3600 + 30 * 60),
+        (title: "8 hours", seconds: 8 * 3600),
+        (title: "8.5 hours", seconds: 8 * 3600 + 30 * 60)
+    ]
+
+    private let presetIdleThresholds = [60, 120, 180, 300, 600]
 
     // MARK: - Initialization
 
     init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         menu = NSMenu()
+        settingsSubmenu = NSMenu()
         infoMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
 
         setupStatusButton()
@@ -43,9 +53,68 @@ class MenuBarController {
         infoMenuItem.title = formattedInfoLine()
         menu.addItem(infoMenuItem)
         menu.addItem(.separator())
+
+        setupSettingsMenu()
+
+        menu.addItem(.separator())
         menu.addItem(createMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q"))
 
         statusItem.menu = menu
+    }
+
+    private func setupSettingsMenu() {
+        let settingsMenuItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: ",")
+        settingsMenuItem.submenu = settingsSubmenu
+
+        // Idle Threshold submenu
+        let idleSubmenu = createIdleThresholdSubmenu()
+        let idleItem = NSMenuItem(title: "Idle Threshold", action: nil, keyEquivalent: "")
+        idleItem.submenu = idleSubmenu
+        settingsSubmenu.addItem(idleItem)
+
+        // Target Work Day submenu
+        let targetSubmenu = createTargetDurationSubmenu()
+        let targetItem = NSMenuItem(title: "Target Work Day", action: nil, keyEquivalent: "")
+        targetItem.submenu = targetSubmenu
+        settingsSubmenu.addItem(targetItem)
+
+        updateSettingsMenuStates()
+        menu.addItem(settingsMenuItem)
+    }
+
+    private func createIdleThresholdSubmenu() -> NSMenu {
+        let submenu = NSMenu()
+        let currentValue = Int(ActivityTracker.shared.idleThreshold)
+
+        for seconds in presetIdleThresholds {
+            let title = formatIdleThreshold(seconds)
+            let item = createMenuItem(title: title, action: #selector(setIdleThreshold(_:)))
+            item.tag = seconds
+            item.state = seconds == currentValue ? .on : .off
+            submenu.addItem(item)
+        }
+
+        submenu.addItem(.separator())
+        submenu.addItem(createMenuItem(title: "Custom...", action: #selector(showCustomIdleThresholdInput)))
+
+        return submenu
+    }
+
+    private func createTargetDurationSubmenu() -> NSMenu {
+        let submenu = NSMenu()
+        let currentValue = ActivityTracker.shared.targetWorkDaySeconds
+
+        for preset in presetDurations {
+            let item = createMenuItem(title: preset.title, action: #selector(setTargetWorkDayDuration(_:)))
+            item.tag = preset.seconds
+            item.state = preset.seconds == currentValue ? .on : .off
+            submenu.addItem(item)
+        }
+
+        submenu.addItem(.separator())
+        submenu.addItem(createMenuItem(title: "Custom...", action: #selector(showCustomDurationInput)))
+
+        return submenu
     }
 
     private func createMenuItem(title: String, action: Selector, keyEquivalent: String = "") -> NSMenuItem {
@@ -84,10 +153,161 @@ class MenuBarController {
         infoMenuItem.title = formattedInfoLine()
     }
 
+    private func updateSettingsMenuStates() {
+        if let idleSubmenu = settingsSubmenu.item(at: 0)?.submenu {
+            let currentSeconds = Int(ActivityTracker.shared.idleThreshold)
+            let presetValues = presetIdleThresholds
+            updateSubmenuCheckmarks(
+                submenu: idleSubmenu,
+                currentValue: currentSeconds,
+                presets: presetValues,
+                formatTitle: formatIdleThreshold,
+                action: #selector(setIdleThreshold(_:))
+            )
+        }
+
+        if let targetSubmenu = settingsSubmenu.item(at: 1)?.submenu {
+            let currentSeconds = ActivityTracker.shared.targetWorkDaySeconds
+            let presetValues = presetDurations.map { $0.seconds }
+            updateSubmenuCheckmarks(
+                submenu: targetSubmenu,
+                currentValue: currentSeconds,
+                presets: presetValues,
+                formatTitle: formatDuration,
+                action: #selector(setTargetWorkDayDuration(_:))
+            )
+        }
+    }
+
+    private func updateSubmenuCheckmarks(
+        submenu: NSMenu,
+        currentValue: Int,
+        presets: [Int],
+        formatTitle: (Int) -> String,
+        action: Selector
+    ) {
+        let isPreset = presets.contains(currentValue)
+
+        // Remove existing custom value items
+        submenu.items
+            .enumerated()
+            .reversed()
+            .filter { $0.element.tag == -1 && $0.element.action == action }
+            .forEach { submenu.removeItem(at: $0.offset) }
+
+        // Update preset checkmarks
+        for item in submenu.items where presets.contains(item.tag) {
+            item.state = item.tag == currentValue ? .on : .off
+        }
+
+        // Add custom value if not a preset
+        guard !isPreset else { return }
+
+        let customItem = createMenuItem(title: formatTitle(currentValue), action: action)
+        customItem.tag = -1
+        customItem.state = .on
+        customItem.representedObject = currentValue
+
+        let insertIndex = findSortedInsertIndex(in: submenu, for: currentValue)
+        submenu.insertItem(customItem, at: insertIndex)
+    }
+
+    private func findSortedInsertIndex(in submenu: NSMenu, for value: Int) -> Int {
+        for (index, item) in submenu.items.enumerated() {
+            if item.isSeparatorItem { return index }
+            let itemValue = item.tag > 0 ? item.tag : 0
+            if itemValue >= value { return index }
+        }
+        return 0
+    }
+
+    // MARK: - Formatting
+
+    private func formatIdleThreshold(_ seconds: Int) -> String {
+        if seconds < 60 {
+            return "\(seconds)s"
+        }
+        let minutes = seconds / 60
+        let remainder = seconds % 60
+        return remainder > 0 ? "\(minutes)m \(remainder)s" : "\(minutes)m"
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let hours = Double(seconds) / 3600.0
+        if hours.truncatingRemainder(dividingBy: 1) == 0 {
+            return "\(Int(hours)) hours"
+        }
+        return String(format: "%.1f hours", hours)
+    }
+
     // MARK: - Actions
 
     @objc private func quitApp() {
         ActivityTracker.shared.saveState()
         NSApplication.shared.terminate(nil)
+    }
+
+    @objc private func setIdleThreshold(_ sender: NSMenuItem) {
+        let seconds = sender.tag == -1 ? (sender.representedObject as? Int ?? 0) : sender.tag
+        ActivityTracker.shared.idleThreshold = TimeInterval(seconds)
+        updateSettingsMenuStates()
+    }
+
+    @objc private func setTargetWorkDayDuration(_ sender: NSMenuItem) {
+        let seconds = sender.tag == -1 ? (sender.representedObject as? Int ?? 0) : sender.tag
+        ActivityTracker.shared.targetWorkDaySeconds = seconds
+        updateSettingsMenuStates()
+        updateMenuItemTitle()
+    }
+
+    @objc private func showCustomDurationInput() {
+        let currentHours = Double(ActivityTracker.shared.targetWorkDaySeconds) / 3600.0
+        showCustomInput(
+            title: "Set Target Work Day",
+            message: "Enter duration in hours (e.g., 7.5):",
+            currentValue: String(format: "%.1f", currentHours),
+            validate: { Double($0).flatMap { $0 > 0 && $0 <= 24 ? Int($0 * 3600) : nil } }
+        ) { [weak self] seconds in
+            ActivityTracker.shared.targetWorkDaySeconds = seconds
+            self?.updateSettingsMenuStates()
+            self?.updateMenuItemTitle()
+        }
+    }
+
+    @objc private func showCustomIdleThresholdInput() {
+        let currentSeconds = Int(ActivityTracker.shared.idleThreshold)
+        showCustomInput(
+            title: "Set Idle Threshold",
+            message: "Enter threshold in seconds (e.g., 90):",
+            currentValue: String(currentSeconds),
+            validate: { Int($0).flatMap { $0 > 0 && $0 <= 3600 ? $0 : nil } }
+        ) { [weak self] seconds in
+            ActivityTracker.shared.idleThreshold = TimeInterval(seconds)
+            self?.updateSettingsMenuStates()
+        }
+    }
+
+    private func showCustomInput(
+        title: String,
+        message: String,
+        currentValue: String,
+        validate: (String) -> Int?,
+        onConfirm: @escaping (Int) -> Void
+    ) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+
+        let inputField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
+        inputField.stringValue = currentValue
+        alert.accessoryView = inputField
+        alert.window.initialFirstResponder = inputField
+
+        guard alert.runModal() == .alertFirstButtonReturn,
+              let value = validate(inputField.stringValue) else { return }
+
+        onConfirm(value)
     }
 }

@@ -9,6 +9,8 @@ class ActivityTracker: ObservableObject {
         static let activeSeconds = "activeSeconds"
         static let lastActiveDate = "lastActiveDate"
         static let workStartTime = "workStartTime"
+        static let idleThreshold = "idleThreshold"
+        static let targetWorkDaySeconds = "targetWorkDaySeconds"
     }
 
     private enum Defaults {
@@ -34,11 +36,15 @@ class ActivityTracker: ObservableObject {
     @Published private(set) var activeSeconds: Int = 0
     @Published private(set) var workStartTime: Date?
     @Published private(set) var isCurrentlyActive: Bool = false
+    @Published var targetWorkDaySeconds: Int {
+        didSet { UserDefaults.standard.set(targetWorkDaySeconds, forKey: Keys.targetWorkDaySeconds) }
+    }
 
     // MARK: - Properties
 
-    var idleThreshold: TimeInterval = Defaults.idleThreshold
-    var targetWorkDaySeconds: Int = Defaults.targetWorkDaySeconds
+    var idleThreshold: TimeInterval {
+        didSet { UserDefaults.standard.set(idleThreshold, forKey: Keys.idleThreshold) }
+    }
 
     private var timer: Timer?
 
@@ -70,6 +76,12 @@ class ActivityTracker: ObservableObject {
     // MARK: - Initialization
 
     private init() {
+        let savedIdleThreshold = UserDefaults.standard.double(forKey: Keys.idleThreshold)
+        idleThreshold = savedIdleThreshold > 0 ? savedIdleThreshold : Defaults.idleThreshold
+
+        let savedTargetSeconds = UserDefaults.standard.integer(forKey: Keys.targetWorkDaySeconds)
+        targetWorkDaySeconds = savedTargetSeconds > 0 ? savedTargetSeconds : Defaults.targetWorkDaySeconds
+
         loadState()
         startTracking()
     }

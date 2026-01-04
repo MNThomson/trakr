@@ -78,50 +78,29 @@ class MenuBarController {
         let settingsMenuItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: ",")
         settingsMenuItem.submenu = settingsSubmenu
 
-        // Idle Threshold submenu
+        // MARK: Core Settings
         let idleSubmenu = createIdleThresholdSubmenu()
         let idleItem = NSMenuItem(title: "Idle Threshold", action: nil, keyEquivalent: "")
         idleItem.submenu = idleSubmenu
         settingsSubmenu.addItem(idleItem)
 
-        // Target Work Day submenu
         let targetSubmenu = createTargetDurationSubmenu()
         let targetItem = NSMenuItem(title: "Daily Hours Goal", action: nil, keyEquivalent: "")
         targetItem.submenu = targetSubmenu
         settingsSubmenu.addItem(targetItem)
 
-        // Screen Overlay toggle
         settingsSubmenu.addItem(.separator())
-        let overlayItem = createMenuItem(
-            title: "Screen Overlay on Goal", action: #selector(toggleScreenOverlay))
-        overlayItem.state = ActivityTracker.shared.screenOverlayEnabled ? .on : .off
-        settingsSubmenu.addItem(overlayItem)
 
-        // Zoom Standing Reminder toggle
-        let zoomReminderItem = createMenuItem(
-            title: "Stand Up for Zoom", action: #selector(toggleZoomStandingReminder))
-        zoomReminderItem.state = ActivityTracker.shared.zoomStandingReminderEnabled ? .on : .off
-        settingsSubmenu.addItem(zoomReminderItem)
+        // MARK: Goal, Breaks, Zoom, Time/Environment
+        setupRemindersMenu()
 
-        // Break Reminders section
+        // MARK: Integrations
         settingsSubmenu.addItem(.separator())
-        setupBreakRemindersMenu()
-
-        // Slack settings
-        settingsSubmenu.addItem(.separator())
-        let slackEnabledItem = createMenuItem(
-            title: "Slack Presence", action: #selector(toggleSlackEnabled))
-        slackEnabledItem.state = SlackPresenceMonitor.shared.isEnabled ? .on : .off
-        settingsSubmenu.addItem(slackEnabledItem)
-        let slackRequireAppItem = createMenuItem(
-            title: "Require Slack App Open", action: #selector(toggleSlackRequireApp))
-        slackRequireAppItem.state = SlackPresenceMonitor.shared.requireSlackApp ? .on : .off
-        settingsSubmenu.addItem(slackRequireAppItem)
-        settingsSubmenu.addItem(
-            createMenuItem(
-                title: "Slack Credentials...", action: #selector(showSlackCredentialsInput)))
-        settingsSubmenu.addItem(
-            createMenuItem(title: "Slack User IDs...", action: #selector(showSlackCoworkersInput)))
+        let slackSubmenu = createSlackSubmenu()
+        let slackItem = NSMenuItem(title: "Slack Presence", action: nil, keyEquivalent: "")
+        slackItem.submenu = slackSubmenu
+        slackItem.state = SlackPresenceMonitor.shared.isEnabled ? .on : .off
+        settingsSubmenu.addItem(slackItem)
 
         updateSettingsMenuStates()
         menu.addItem(settingsMenuItem)
@@ -165,28 +144,13 @@ class MenuBarController {
         return submenu
     }
 
-    private func setupBreakRemindersMenu() {
-        // Eye Break Interval submenu (Disabled = 0)
-        let eyeBreakIntervalSubmenu = createEyeBreakIntervalSubmenu()
-        let eyeBreakIntervalItem = NSMenuItem(
-            title: "Eye Break (20-20-20)", action: nil, keyEquivalent: "")
-        eyeBreakIntervalItem.submenu = eyeBreakIntervalSubmenu
-        eyeBreakIntervalItem.state = ActivityTracker.shared.eyeBreakIntervalMinutes > 0 ? .on : .off
-        settingsSubmenu.addItem(eyeBreakIntervalItem)
+    private func setupRemindersMenu() {
+        // Goal
+        let overlayItem = createMenuItem(
+            title: "Screen Overlay on Goal", action: #selector(toggleScreenOverlay))
+        overlayItem.state = ActivityTracker.shared.screenOverlayEnabled ? .on : .off
+        settingsSubmenu.addItem(overlayItem)
 
-        // Stretch Break toggle (hourly at :55)
-        let stretchBreakItem = createMenuItem(
-            title: "Stretch Break (Hourly)", action: #selector(toggleStretchBreak))
-        stretchBreakItem.state = ActivityTracker.shared.stretchBreakEnabled ? .on : .off
-        settingsSubmenu.addItem(stretchBreakItem)
-
-        // Post-Zoom Stretch toggle
-        let postZoomStretchItem = createMenuItem(
-            title: "Stretch After Zoom", action: #selector(togglePostZoomStretch))
-        postZoomStretchItem.state = ActivityTracker.shared.postZoomStretchEnabled ? .on : .off
-        settingsSubmenu.addItem(postZoomStretchItem)
-
-        // Wind Down Timing submenu (Disabled = 0)
         let windDownTimingSubmenu = createWindDownTimingSubmenu()
         let windDownTimingItem = NSMenuItem(
             title: "Wrap-Up Reminder", action: nil, keyEquivalent: "")
@@ -194,7 +158,31 @@ class MenuBarController {
         windDownTimingItem.state = ActivityTracker.shared.windDownMinutes > 0 ? .on : .off
         settingsSubmenu.addItem(windDownTimingItem)
 
-        // Sunset Alert Timing submenu (Disabled = 0)
+        // Breaks
+        let eyeBreakIntervalSubmenu = createEyeBreakIntervalSubmenu()
+        let eyeBreakIntervalItem = NSMenuItem(
+            title: "Eye Break (20-20-20)", action: nil, keyEquivalent: "")
+        eyeBreakIntervalItem.submenu = eyeBreakIntervalSubmenu
+        eyeBreakIntervalItem.state = ActivityTracker.shared.eyeBreakIntervalMinutes > 0 ? .on : .off
+        settingsSubmenu.addItem(eyeBreakIntervalItem)
+
+        let stretchBreakItem = createMenuItem(
+            title: "Stretch Break (Hourly)", action: #selector(toggleStretchBreak))
+        stretchBreakItem.state = ActivityTracker.shared.stretchBreakEnabled ? .on : .off
+        settingsSubmenu.addItem(stretchBreakItem)
+
+        // Zoom
+        let zoomReminderItem = createMenuItem(
+            title: "Stand Up for Zoom", action: #selector(toggleZoomStandingReminder))
+        zoomReminderItem.state = ActivityTracker.shared.zoomStandingReminderEnabled ? .on : .off
+        settingsSubmenu.addItem(zoomReminderItem)
+
+        let postZoomStretchItem = createMenuItem(
+            title: "Stretch After Zoom", action: #selector(togglePostZoomStretch))
+        postZoomStretchItem.state = ActivityTracker.shared.postZoomStretchEnabled ? .on : .off
+        settingsSubmenu.addItem(postZoomStretchItem)
+
+        // Time/Environment
         let sunsetAlertTimingSubmenu = createSunsetAlertTimingSubmenu()
         let sunsetAlertTimingItem = NSMenuItem(
             title: "Sunset Alert", action: nil, keyEquivalent: "")
@@ -202,7 +190,6 @@ class MenuBarController {
         sunsetAlertTimingItem.state = ActivityTracker.shared.sunsetAlertMinutes > 0 ? .on : .off
         settingsSubmenu.addItem(sunsetAlertTimingItem)
 
-        // Set Location for sunset calculation
         settingsSubmenu.addItem(
             createMenuItem(title: "Set Location...", action: #selector(showLocationInput)))
     }
@@ -287,6 +274,26 @@ class MenuBarController {
         submenu.addItem(.separator())
         submenu.addItem(
             createMenuItem(title: "Custom...", action: #selector(showCustomSunsetAlertTimingInput)))
+
+        return submenu
+    }
+
+    private func createSlackSubmenu() -> NSMenu {
+        let submenu = NSMenu()
+
+        let enabledItem = createMenuItem(title: "Enabled", action: #selector(toggleSlackEnabled))
+        enabledItem.state = SlackPresenceMonitor.shared.isEnabled ? .on : .off
+        submenu.addItem(enabledItem)
+
+        let requireAppItem = createMenuItem(
+            title: "Require App Open", action: #selector(toggleSlackRequireApp))
+        requireAppItem.state = SlackPresenceMonitor.shared.requireSlackApp ? .on : .off
+        submenu.addItem(requireAppItem)
+
+        submenu.addItem(.separator())
+
+        submenu.addItem(createMenuItem(title: "Credentials...", action: #selector(showSlackCredentialsInput)))
+        submenu.addItem(createMenuItem(title: "User IDs...", action: #selector(showSlackCoworkersInput)))
 
         return submenu
     }
@@ -408,17 +415,34 @@ class MenuBarController {
         updateIdleSubmenu()
         updateTargetSubmenu()
         updateToggleSubmenu(
-            at: 6, currentValue: ActivityTracker.shared.eyeBreakIntervalMinutes,
-            presets: presetEyeBreakIntervals, formatTitle: { "\($0) min" },
-            action: #selector(setEyeBreakInterval(_:)))
-        updateToggleSubmenu(
-            at: 9, currentValue: ActivityTracker.shared.windDownMinutes,
+            at: 4, currentValue: ActivityTracker.shared.windDownMinutes,
             presets: presetWindDownMinutes, formatTitle: { "\($0) min before" },
             action: #selector(setWindDownTiming(_:)))
         updateToggleSubmenu(
-            at: 10, currentValue: ActivityTracker.shared.sunsetAlertMinutes,
+            at: 5, currentValue: ActivityTracker.shared.eyeBreakIntervalMinutes,
+            presets: presetEyeBreakIntervals, formatTitle: { "\($0) min" },
+            action: #selector(setEyeBreakInterval(_:)))
+        updateToggleSubmenu(
+            at: 9, currentValue: ActivityTracker.shared.sunsetAlertMinutes,
             presets: presetSunsetAlertMinutes, formatTitle: { "\($0) min before" },
             action: #selector(setSunsetAlertTiming(_:)))
+        updateSlackSubmenu()
+    }
+
+    private func updateSlackSubmenu() {
+        // Slack Presence submenu is at index 12
+        guard let slackItem = settingsSubmenu.item(at: 12),
+              let slackSubmenu = slackItem.submenu
+        else { return }
+        slackItem.state = SlackPresenceMonitor.shared.isEnabled ? .on : .off
+        // Update Enabled toggle state
+        if let enabledItem = slackSubmenu.item(at: 0) {
+            enabledItem.state = SlackPresenceMonitor.shared.isEnabled ? .on : .off
+        }
+        // Update Require App Open toggle state
+        if let requireAppItem = slackSubmenu.item(at: 1) {
+            requireAppItem.state = SlackPresenceMonitor.shared.requireSlackApp ? .on : .off
+        }
     }
 
     private func updateIdleSubmenu() {
@@ -705,6 +729,8 @@ class MenuBarController {
     @objc private func toggleSlackEnabled(_ sender: NSMenuItem) {
         SlackPresenceMonitor.shared.isEnabled.toggle()
         sender.state = SlackPresenceMonitor.shared.isEnabled ? .on : .off
+        // Update parent submenu checkmark
+        settingsSubmenu.item(at: 12)?.state = SlackPresenceMonitor.shared.isEnabled ? .on : .off
     }
 
     @objc private func toggleSlackRequireApp(_ sender: NSMenuItem) {

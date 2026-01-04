@@ -85,8 +85,22 @@ class ActivityTracker: ObservableObject {
 
     var formattedIdleTime: String? {
         guard let start = workStartTime else { return nil }
-        let elapsedSeconds = Int(Date().timeIntervalSince(start))
-        let idleSeconds = max(0, elapsedSeconds - activeSeconds)
+
+        // After goal is reached, show break time it took to reach the goal (frozen)
+        // Before goal, show current accumulated break time
+        let endTime: Date
+        let activeSecondsToUse: Int
+
+        if let goalTime = goalReachedTime {
+            endTime = goalTime
+            activeSecondsToUse = targetWorkDaySeconds
+        } else {
+            endTime = Date()
+            activeSecondsToUse = activeSeconds
+        }
+
+        let elapsedSeconds = Int(endTime.timeIntervalSince(start))
+        let idleSeconds = max(0, elapsedSeconds - activeSecondsToUse)
         let hours = idleSeconds / 3600
         let minutes = (idleSeconds % 3600) / 60
         return hours > 0 ? "\(hours)h\(minutes)m" : "\(minutes)m"

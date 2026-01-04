@@ -15,6 +15,9 @@ class ZoomMeetingDetector {
     /// Called when user joins a meeting (after verification delay)
     var onMeetingJoined: (() -> Void)?
 
+    /// Called when user leaves a meeting (after verification delay to skip back-to-back meetings)
+    var onMeetingLeft: (() -> Void)?
+
     // MARK: - Constants
 
     /// Delay before confirming meeting join to avoid false positives
@@ -26,7 +29,7 @@ class ZoomMeetingDetector {
 
     // MARK: - Public Methods
 
-    /// Check for Zoom meeting state changes and trigger callback on join
+    /// Check for Zoom meeting state changes and trigger callbacks on join/leave
     func checkStateChange() {
         let inMeetingNow = checkForZoomMeeting()
 
@@ -36,6 +39,15 @@ class ZoomMeetingDetector {
             DispatchQueue.main.asyncAfter(deadline: .now() + verificationDelay) { [weak self] in
                 guard let self = self, self.checkForZoomMeeting() else { return }
                 self.onMeetingJoined?()
+            }
+        }
+
+        // Trigger callback on transition: in meeting -> not in meeting
+        if !inMeetingNow && isInMeeting {
+            // Delay notification, verify still not in meeting (handles back-to-back meetings)
+            DispatchQueue.main.asyncAfter(deadline: .now() + verificationDelay) { [weak self] in
+                guard let self = self, !self.checkForZoomMeeting() else { return }
+                self.onMeetingLeft?()
             }
         }
 

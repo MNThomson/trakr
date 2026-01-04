@@ -22,6 +22,7 @@ class MenuBarController {
     ]
 
     private let presetIdleThresholds = [60, 120, 180, 300, 600]
+    private let presetEyeBreakIntervals = [15, 20, 30]  // minutes
 
     // MARK: - Initialization
 
@@ -100,6 +101,10 @@ class MenuBarController {
         zoomReminderItem.state = ActivityTracker.shared.zoomStandingReminderEnabled ? .on : .off
         settingsSubmenu.addItem(zoomReminderItem)
 
+        // Break Reminders section
+        settingsSubmenu.addItem(.separator())
+        setupBreakRemindersMenu()
+
         // Slack settings
         settingsSubmenu.addItem(.separator())
         let slackEnabledItem = createMenuItem(
@@ -153,6 +158,51 @@ class MenuBarController {
         submenu.addItem(.separator())
         submenu.addItem(
             createMenuItem(title: "Custom...", action: #selector(showCustomDurationInput)))
+
+        return submenu
+    }
+
+    private func setupBreakRemindersMenu() {
+        // Eye Break toggle with interval submenu
+        let eyeBreakItem = createMenuItem(
+            title: "Eye Break (20-20-20)", action: #selector(toggleEyeBreak))
+        eyeBreakItem.state = ActivityTracker.shared.eyeBreakEnabled ? .on : .off
+        settingsSubmenu.addItem(eyeBreakItem)
+
+        // Eye Break Interval submenu
+        let eyeBreakIntervalSubmenu = createEyeBreakIntervalSubmenu()
+        let eyeBreakIntervalItem = NSMenuItem(title: "Eye Break Interval", action: nil, keyEquivalent: "")
+        eyeBreakIntervalItem.submenu = eyeBreakIntervalSubmenu
+        settingsSubmenu.addItem(eyeBreakIntervalItem)
+
+        // Stretch Break toggle (hourly at :55)
+        let stretchBreakItem = createMenuItem(
+            title: "Stretch Break (Hourly)", action: #selector(toggleStretchBreak))
+        stretchBreakItem.state = ActivityTracker.shared.stretchBreakEnabled ? .on : .off
+        settingsSubmenu.addItem(stretchBreakItem)
+
+        // Post-Zoom Stretch toggle
+        let postZoomStretchItem = createMenuItem(
+            title: "Post-Zoom Stretch", action: #selector(togglePostZoomStretch))
+        postZoomStretchItem.state = ActivityTracker.shared.postZoomStretchEnabled ? .on : .off
+        settingsSubmenu.addItem(postZoomStretchItem)
+    }
+
+    private func createEyeBreakIntervalSubmenu() -> NSMenu {
+        let submenu = NSMenu()
+        let currentValue = ActivityTracker.shared.eyeBreakIntervalMinutes
+
+        for minutes in presetEyeBreakIntervals {
+            let title = "\(minutes) min"
+            let item = createMenuItem(title: title, action: #selector(setEyeBreakInterval(_:)))
+            item.tag = minutes
+            item.state = minutes == currentValue ? .on : .off
+            submenu.addItem(item)
+        }
+
+        submenu.addItem(.separator())
+        submenu.addItem(
+            createMenuItem(title: "Custom...", action: #selector(showCustomEyeBreakIntervalInput)))
 
         return submenu
     }
@@ -294,6 +344,18 @@ class MenuBarController {
                 action: #selector(setTargetWorkDayDuration(_:))
             )
         }
+
+        // Update Eye Break Interval submenu (index 7: after idle, target, separator, overlay, zoom, separator, eye break toggle)
+        if let eyeBreakIntervalSubmenu = settingsSubmenu.item(at: 7)?.submenu {
+            let currentMinutes = ActivityTracker.shared.eyeBreakIntervalMinutes
+            updateSubmenuCheckmarks(
+                submenu: eyeBreakIntervalSubmenu,
+                currentValue: currentMinutes,
+                presets: presetEyeBreakIntervals,
+                formatTitle: { "\($0) min" },
+                action: #selector(setEyeBreakInterval(_:))
+            )
+        }
     }
 
     private func updateSubmenuCheckmarks(
@@ -383,6 +445,41 @@ class MenuBarController {
     @objc private func toggleZoomStandingReminder(_ sender: NSMenuItem) {
         ActivityTracker.shared.zoomStandingReminderEnabled.toggle()
         sender.state = ActivityTracker.shared.zoomStandingReminderEnabled ? .on : .off
+    }
+
+    @objc private func toggleEyeBreak(_ sender: NSMenuItem) {
+        ActivityTracker.shared.eyeBreakEnabled.toggle()
+        sender.state = ActivityTracker.shared.eyeBreakEnabled ? .on : .off
+    }
+
+    @objc private func toggleStretchBreak(_ sender: NSMenuItem) {
+        ActivityTracker.shared.stretchBreakEnabled.toggle()
+        sender.state = ActivityTracker.shared.stretchBreakEnabled ? .on : .off
+    }
+
+    @objc private func togglePostZoomStretch(_ sender: NSMenuItem) {
+        ActivityTracker.shared.postZoomStretchEnabled.toggle()
+        sender.state = ActivityTracker.shared.postZoomStretchEnabled ? .on : .off
+    }
+
+    @objc private func setEyeBreakInterval(_ sender: NSMenuItem) {
+        let minutes = sender.tag == -1 ? (sender.representedObject as? Int ?? 20) : sender.tag
+        ActivityTracker.shared.eyeBreakIntervalMinutes = minutes
+        updateSettingsMenuStates()
+    }
+
+    @objc private func showCustomEyeBreakIntervalInput() {
+        let currentMinutes = ActivityTracker.shared.eyeBreakIntervalMinutes
+        showCustomInput(
+            title: "Set Eye Break Interval",
+            message: "Enter interval in minutes (e.g., 20):",
+            currentValue: String(currentMinutes),
+            validate: { Int($0).flatMap { $0 > 0 && $0 <= 120 ? $0 : nil } },
+            onConfirm: { [weak self] minutes in
+                ActivityTracker.shared.eyeBreakIntervalMinutes = minutes
+                self?.updateSettingsMenuStates()
+            }
+        )
     }
 
     @objc private func toggleSlackEnabled(_ sender: NSMenuItem) {

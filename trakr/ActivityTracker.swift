@@ -13,6 +13,10 @@ class ActivityTracker: ObservableObject {
         static let goalReachedTime = "goalReachedTime"
         static let screenOverlayEnabled = "screenOverlayEnabled"
         static let zoomStandingReminderEnabled = "zoomStandingReminderEnabled"
+        static let eyeBreakEnabled = "eyeBreakEnabled"
+        static let eyeBreakIntervalMinutes = "eyeBreakIntervalMinutes"
+        static let stretchBreakEnabled = "stretchBreakEnabled"
+        static let postZoomStretchEnabled = "postZoomStretchEnabled"
     }
 
     private enum Defaults {
@@ -20,6 +24,7 @@ class ActivityTracker: ObservableObject {
         static let targetWorkDaySeconds = 8 * 3600
         static let workDayStartHour = 4
         static let saveInterval = 30
+        static let eyeBreakIntervalMinutes = 20
     }
 
     // MARK: - Singleton
@@ -54,8 +59,26 @@ class ActivityTracker: ObservableObject {
         }
     }
 
+    var eyeBreakEnabled: Bool {
+        didSet { UserDefaults.standard.set(eyeBreakEnabled, forKey: Keys.eyeBreakEnabled) }
+    }
+
+    var eyeBreakIntervalMinutes: Int {
+        didSet { UserDefaults.standard.set(eyeBreakIntervalMinutes, forKey: Keys.eyeBreakIntervalMinutes) }
+    }
+
+    var stretchBreakEnabled: Bool {
+        didSet { UserDefaults.standard.set(stretchBreakEnabled, forKey: Keys.stretchBreakEnabled) }
+    }
+
+    var postZoomStretchEnabled: Bool {
+        didSet { UserDefaults.standard.set(postZoomStretchEnabled, forKey: Keys.postZoomStretchEnabled) }
+    }
+
     private var timer: Timer?
     private var goalReachedTime: Date?
+    private var secondsSinceLastEyeBreak: Int = 0
+    private var lastStretchBreakHour: Int?
 
     private lazy var timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -124,6 +147,13 @@ class ActivityTracker: ObservableObject {
         // Default Zoom standing reminder to disabled if not set
         zoomStandingReminderEnabled = UserDefaults.standard.bool(forKey: Keys.zoomStandingReminderEnabled)
 
+        // Break reminder settings
+        eyeBreakEnabled = UserDefaults.standard.bool(forKey: Keys.eyeBreakEnabled)
+        let savedEyeBreakInterval = UserDefaults.standard.integer(forKey: Keys.eyeBreakIntervalMinutes)
+        eyeBreakIntervalMinutes = savedEyeBreakInterval > 0 ? savedEyeBreakInterval : Defaults.eyeBreakIntervalMinutes
+        stretchBreakEnabled = UserDefaults.standard.bool(forKey: Keys.stretchBreakEnabled)
+        postZoomStretchEnabled = UserDefaults.standard.bool(forKey: Keys.postZoomStretchEnabled)
+
         loadState()
         setupZoomDetector()
         NotificationService.shared.requestPermissions()
@@ -183,7 +213,12 @@ class ActivityTracker: ObservableObject {
     private func setupZoomDetector() {
         ZoomMeetingDetector.shared.onMeetingJoined = { [weak self] in
             guard let self = self, self.zoomStandingReminderEnabled else { return }
-            NotificationService.shared.sendStandingReminder()
+            EmojiFlashController.shared.flash(emoji: "🧍")
+        }
+
+        ZoomMeetingDetector.shared.onMeetingLeft = { [weak self] in
+            guard let self = self, self.postZoomStretchEnabled else { return }
+            EmojiFlashController.shared.flash(emoji: "🚶")
         }
     }
 
@@ -205,10 +240,13 @@ class ActivityTracker: ObservableObject {
             resetForNewWorkDay()
         }
 
-        // Check for Zoom meeting state changes (independent of pause state)
-        if zoomStandingReminderEnabled {
+        // Check for Zoom meeting state changes (for standing reminder and post-zoom stretch)
+        if zoomStandingReminderEnabled || postZoomStretchEnabled {
             ZoomMeetingDetector.shared.checkStateChange()
         }
+
+        // Check for hourly stretch break at minute 55 (clock-based, skip if in Zoom)
+        checkStretchBreak(now: now)
 
         isCurrentlyActive = IdleDetector.shared.isUserActive(idleThreshold: idleThreshold)
         guard isCurrentlyActive && !isPaused else { return }
@@ -219,6 +257,9 @@ class ActivityTracker: ObservableObject {
         }
 
         activeSeconds += 1
+
+        // Check for eye break (active time based)
+        checkEyeBreak()
 
         if activeSeconds >= targetWorkDaySeconds && goalReachedTime == nil {
             goalReachedTime = now
@@ -231,6 +272,40 @@ class ActivityTracker: ObservableObject {
 
         if activeSeconds % Defaults.saveInterval == 0 {
             saveState()
+        }
+    }
+
+    // MARK: - Break Reminders
+
+    private func checkEyeBreak() {
+        guard eyeBreakEnabled else {
+            secondsSinceLastEyeBreak = 0
+            return
+        }
+
+        secondsSinceLastEyeBreak += 1
+        let intervalSeconds = eyeBreakIntervalMinutes * 60
+
+        if secondsSinceLastEyeBreak >= intervalSeconds {
+            EmojiFlashController.shared.flash(emoji: "👀")
+            secondsSinceLastEyeBreak = 0
+        }
+    }
+
+    private func checkStretchBreak(now: Date) {
+        guard stretchBreakEnabled else {
+            lastStretchBreakHour = nil
+            return
+        }
+
+        let calendar = Calendar.current
+        let minute = calendar.component(.minute, from: now)
+        let hour = calendar.component(.hour, from: now)
+
+        // Trigger at minute 55, if not already triggered this hour and not in a Zoom meeting
+        if minute == 55 && lastStretchBreakHour != hour && !ZoomMeetingDetector.shared.isInMeeting {
+            EmojiFlashController.shared.flash(emoji: "🤸")
+            lastStretchBreakHour = hour
         }
     }
 

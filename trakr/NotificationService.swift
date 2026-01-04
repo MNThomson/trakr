@@ -8,10 +8,6 @@ class NotificationService {
 
     static let shared = NotificationService()
 
-    // MARK: - Constants
-
-    private let standingReminderAutoDismissDelay: TimeInterval = 10
-
     // MARK: - Initialization
 
     private init() {}
@@ -41,33 +37,6 @@ class NotificationService {
             if let error = error {
                 print("Failed to send notification: \(error)")
             }
-        }
-    }
-
-    func sendStandingReminder() {
-        let content = UNMutableNotificationContent()
-        content.title = "Stand Up!"
-        content.body = "You joined a Zoom meeting - time to use your standing desk!"
-        content.sound = .default
-
-        // Use UUID to ensure each notification comes through independently
-        let notificationId = "zoomStanding-\(UUID().uuidString)"
-        let request = UNNotificationRequest(
-            identifier: notificationId,
-            content: content,
-            trigger: nil
-        )
-
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("Failed to send standing reminder: \(error)")
-            }
-        }
-
-        // Auto-dismiss after delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + standingReminderAutoDismissDelay) {
-            UNUserNotificationCenter.current().removeDeliveredNotifications(
-                withIdentifiers: [notificationId])
         }
     }
 }

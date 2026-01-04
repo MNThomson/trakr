@@ -1,7 +1,4 @@
 import Foundation
-import IOKit.pwr_mgt
-import Quartz
-import UserNotifications
 
 class ActivityTracker: ObservableObject {
 
@@ -24,13 +21,6 @@ class ActivityTracker: ObservableObject {
         static let workDayStartHour = 4
         static let saveInterval = 30
     }
-
-    private static let trackedEventTypes: [CGEventType] = [
-        .mouseMoved,
-        .keyDown,
-        .leftMouseDown,
-        .scrollWheel,
-    ]
 
     // MARK: - Singleton
 
@@ -66,7 +56,6 @@ class ActivityTracker: ObservableObject {
 
     private var timer: Timer?
     private var goalReachedTime: Date?
-    private var isInZoomMeeting: Bool = false
 
     private lazy var timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -144,7 +133,8 @@ class ActivityTracker: ObservableObject {
         }
 
         loadState()
-        requestNotificationPermissions()
+        setupZoomDetector()
+        NotificationService.shared.requestPermissions()
         startTracking()
     }
 
@@ -196,6 +186,15 @@ class ActivityTracker: ObservableObject {
         saveState()
     }
 
+    // MARK: - Zoom Meeting Detection
+
+    private func setupZoomDetector() {
+        ZoomMeetingDetector.shared.onMeetingJoined = { [weak self] in
+            guard let self = self, self.zoomStandingReminderEnabled else { return }
+            NotificationService.shared.sendStandingReminder()
+        }
+    }
+
     // MARK: - Activity Tracking
 
     private func startTracking() {
@@ -215,11 +214,11 @@ class ActivityTracker: ObservableObject {
         }
 
         // Check for Zoom meeting state changes (independent of pause state)
-        checkZoomMeetingStateChange()
+        if zoomStandingReminderEnabled {
+            ZoomMeetingDetector.shared.checkStateChange()
+        }
 
-        let isInputActive = getSystemIdleTime() < idleThreshold
-        let hasPowerAssertion = hasActivePowerAssertions()
-        isCurrentlyActive = isInputActive || hasPowerAssertion
+        isCurrentlyActive = IdleDetector.shared.isUserActive(idleThreshold: idleThreshold)
         guard isCurrentlyActive && !isPaused else { return }
 
         if workStartTime == nil && isAfterWorkDayStart(now) {
@@ -232,7 +231,7 @@ class ActivityTracker: ObservableObject {
         if activeSeconds >= targetWorkDaySeconds && goalReachedTime == nil {
             goalReachedTime = now
             UserDefaults.standard.set(now, forKey: Keys.goalReachedTime)
-            sendDailyGoalNotification()
+            NotificationService.shared.sendDailyGoalNotification(formattedActiveTime: formattedActiveTime)
             if screenOverlayEnabled {
                 ScreenOverlayController.shared.showOverlay()
             }
@@ -240,88 +239,6 @@ class ActivityTracker: ObservableObject {
 
         if activeSeconds % Defaults.saveInterval == 0 {
             saveState()
-        }
-    }
-
-    private func getSystemIdleTime() -> TimeInterval {
-        Self.trackedEventTypes
-            .map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }
-            .min() ?? .infinity
-    }
-
-    private func hasActivePowerAssertions() -> Bool {
-        var assertionsStatus: Unmanaged<CFDictionary>?
-        guard IOPMCopyAssertionsStatus(&assertionsStatus) == kIOReturnSuccess,
-            let dict = assertionsStatus?.takeRetainedValue() as? [String: Int]
-        else {
-            return false
-        }
-
-        // PreventUserIdleDisplaySleep is created by apps like Zoom, video players
-        // (PreventUserIdleSystemSleep is always active from powerd when display is on, so we skip it)
-        let activeTypes = [
-            "PreventUserIdleDisplaySleep",
-            "NoDisplaySleepAssertion",
-        ]
-
-        return activeTypes.contains { dict[$0] ?? 0 > 0 }
-    }
-
-    // MARK: - Zoom Meeting Detection
-
-    private func checkForZoomMeeting() -> Bool {
-        // CptHost is a Zoom helper process that runs when you're in a meeting
-        let runningApps = NSWorkspace.shared.runningApplications
-        return runningApps.contains { app in
-            guard let bundleId = app.bundleIdentifier else { return false }
-            // CptHost.app is spawned when joining a Zoom meeting
-            return bundleId == "us.zoom.CptHost"
-        }
-    }
-
-    private func checkZoomMeetingStateChange() {
-        guard zoomStandingReminderEnabled else { return }
-
-        let inMeetingNow = checkForZoomMeeting()
-
-        // Trigger notification on transition: not in meeting -> in meeting
-        if inMeetingNow && !isInZoomMeeting {
-            // Delay notification by 10 seconds, verify still in meeting before sending
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
-                guard let self = self,
-                      self.zoomStandingReminderEnabled,
-                      self.checkForZoomMeeting() else { return }
-                self.sendStandingReminder()
-            }
-        }
-
-        isInZoomMeeting = inMeetingNow
-    }
-
-    private func sendStandingReminder() {
-        let content = UNMutableNotificationContent()
-        content.title = "Stand Up!"
-        content.body = "You joined a Zoom meeting - time to use your standing desk!"
-        content.sound = .default
-
-        // Use UUID to ensure each notification comes through independently
-        let notificationId = "zoomStanding-\(UUID().uuidString)"
-        let request = UNNotificationRequest(
-            identifier: notificationId,
-            content: content,
-            trigger: nil
-        )
-
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("Failed to send standing reminder: \(error)")
-            }
-        }
-
-        // Auto-dismiss after 10 seconds
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
-            UNUserNotificationCenter.current().removeDeliveredNotifications(
-                withIdentifiers: [notificationId])
         }
     }
 
@@ -338,33 +255,5 @@ class ActivityTracker: ObservableObject {
 
     private func isAfterWorkDayStart(_ date: Date) -> Bool {
         Calendar.current.component(.hour, from: date) >= Defaults.workDayStartHour
-    }
-
-    // MARK: - Notifications
-
-    private func requestNotificationPermissions() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) {
-            _, error in
-            if let error = error {
-                print("Notification permission error: \(error)")
-            }
-        }
-    }
-
-    private func sendDailyGoalNotification() {
-        let content = UNMutableNotificationContent()
-        content.title = "🎉 Daily Goal Reached!"
-        content.body = "You've completed \(formattedActiveTime) of work today. Great job!"
-        content.sound = .defaultCritical
-        content.interruptionLevel = .timeSensitive
-
-        let request = UNNotificationRequest(
-            identifier: "dailyGoalReached", content: content, trigger: nil)
-
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("Failed to send notification: \(error)")
-            }
-        }
     }
 }

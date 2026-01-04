@@ -35,6 +35,7 @@ class MenuBarController {
         setupStatusButton()
         setupMenu()
         setupObservers()
+        SlackPresenceMonitor.shared.start()
     }
 
     deinit {
@@ -98,6 +99,21 @@ class MenuBarController {
             title: "Zoom Standing Reminder", action: #selector(toggleZoomStandingReminder))
         zoomReminderItem.state = ActivityTracker.shared.zoomStandingReminderEnabled ? .on : .off
         settingsSubmenu.addItem(zoomReminderItem)
+
+        // Slack settings
+        settingsSubmenu.addItem(.separator())
+        let slackEnabledItem = createMenuItem(
+            title: "Slack Presence", action: #selector(toggleSlackEnabled))
+        slackEnabledItem.state = SlackPresenceMonitor.shared.isEnabled ? .on : .off
+        settingsSubmenu.addItem(slackEnabledItem)
+        let slackRequireAppItem = createMenuItem(
+            title: "Require Slack App Open", action: #selector(toggleSlackRequireApp))
+        slackRequireAppItem.state = SlackPresenceMonitor.shared.requireSlackApp ? .on : .off
+        settingsSubmenu.addItem(slackRequireAppItem)
+        settingsSubmenu.addItem(
+            createMenuItem(title: "Slack Credentials...", action: #selector(showSlackCredentialsInput)))
+        settingsSubmenu.addItem(
+            createMenuItem(title: "Slack User IDs...", action: #selector(showSlackCoworkersInput)))
 
         updateSettingsMenuStates()
         menu.addItem(settingsMenuItem)
@@ -177,6 +193,11 @@ class MenuBarController {
                 self?.updatePauseMenuItem()
             }
             .store(in: &cancellables)
+
+        SlackPresenceMonitor.shared.$onlineInitials
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateStatusIcon() }
+            .store(in: &cancellables)
     }
 
     // MARK: - UI Updates
@@ -237,6 +258,11 @@ class MenuBarController {
             accessibilityDescription: "Activity Timer"
         )
         button.image?.isTemplate = true
+        button.imagePosition = .imageRight
+
+        // Display online coworker initials
+        let initials = SlackPresenceMonitor.shared.onlineInitials
+        button.title = initials.isEmpty ? "" : "\(initials) "
     }
 
     private func updatePauseMenuItem() {
@@ -359,6 +385,16 @@ class MenuBarController {
         sender.state = ActivityTracker.shared.zoomStandingReminderEnabled ? .on : .off
     }
 
+    @objc private func toggleSlackEnabled(_ sender: NSMenuItem) {
+        SlackPresenceMonitor.shared.isEnabled.toggle()
+        sender.state = SlackPresenceMonitor.shared.isEnabled ? .on : .off
+    }
+
+    @objc private func toggleSlackRequireApp(_ sender: NSMenuItem) {
+        SlackPresenceMonitor.shared.requireSlackApp.toggle()
+        sender.state = SlackPresenceMonitor.shared.requireSlackApp ? .on : .off
+    }
+
     @objc private func setIdleThreshold(_ sender: NSMenuItem) {
         let seconds = sender.tag == -1 ? (sender.representedObject as? Int ?? 0) : sender.tag
         ActivityTracker.shared.idleThreshold = TimeInterval(seconds)
@@ -427,5 +463,111 @@ class MenuBarController {
         else { return }
 
         onConfirm(value)
+    }
+
+    // MARK: - Slack Settings
+
+    @objc private func showSlackCredentialsInput() {
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = "Slack Credentials"
+        alert.informativeText = "Enter your Slack cookie and token:"
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+
+        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 70))
+
+        let cookieLabel = NSTextField(labelWithString: "Cookie (d=):")
+        cookieLabel.frame = NSRect(x: 0, y: 46, width: 80, height: 17)
+
+        let cookieField = NSTextField(frame: NSRect(x: 85, y: 44, width: 215, height: 22))
+        cookieField.stringValue = SlackPresenceMonitor.shared.cookie
+        cookieField.placeholderString = "xoxd-..."
+
+        let tokenLabel = NSTextField(labelWithString: "Token:")
+        tokenLabel.frame = NSRect(x: 0, y: 14, width: 80, height: 17)
+
+        let tokenField = NSTextField(frame: NSRect(x: 85, y: 12, width: 215, height: 22))
+        tokenField.stringValue = SlackPresenceMonitor.shared.token
+        tokenField.placeholderString = "xoxc-..."
+
+        containerView.addSubview(cookieLabel)
+        containerView.addSubview(cookieField)
+        containerView.addSubview(tokenLabel)
+        containerView.addSubview(tokenField)
+
+        alert.accessoryView = containerView
+        alert.window.initialFirstResponder = cookieField
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let cookie = cookieField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let token = tokenField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cookie.isEmpty, !token.isEmpty else { return }
+
+        SlackPresenceMonitor.shared.cookie = cookie
+        SlackPresenceMonitor.shared.token = token
+        SlackPresenceMonitor.shared.reconnect()
+    }
+
+    @objc private func showSlackCoworkersInput() {
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = "Slack User IDs"
+        alert.informativeText = "Enter one coworker per line (format: ID:Name):\ne.g., U01ABC:Alice"
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+
+        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 350, height: 120))
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .bezelBorder
+
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 350, height: 120))
+        textView.isEditable = true
+        textView.isSelectable = true
+        textView.font = NSFont.systemFont(ofSize: 13)
+        textView.string = formatCoworkersForDisplay(multiline: true)
+        textView.autoresizingMask = [.width]
+
+        scrollView.documentView = textView
+
+        alert.accessoryView = scrollView
+        alert.window.initialFirstResponder = textView
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let input = textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty else { return }
+
+        var coworkers: [String: String] = [:]
+        // Support both newlines and commas as separators
+        let normalized = input.replacingOccurrences(of: "\n", with: ",")
+        let entries = normalized.split(separator: ",")
+        for entry in entries {
+            let parts = entry.split(separator: ":", maxSplits: 1)
+            if parts.count == 2 {
+                let userId = String(parts[0]).trimmingCharacters(in: .whitespaces)
+                let name = String(parts[1]).trimmingCharacters(in: .whitespaces)
+                if !userId.isEmpty, !name.isEmpty {
+                    coworkers[userId] = name
+                }
+            }
+        }
+
+        guard !coworkers.isEmpty else { return }
+
+        SlackPresenceMonitor.shared.coworkers = coworkers
+        SlackPresenceMonitor.shared.reconnect()
+    }
+
+    private func formatCoworkersForDisplay(multiline: Bool = false) -> String {
+        SlackPresenceMonitor.shared.coworkers
+            .map { "\($0.key):\($0.value)" }
+            .joined(separator: multiline ? "\n" : ",")
     }
 }

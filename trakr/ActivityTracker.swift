@@ -118,19 +118,11 @@ class ActivityTracker: ObservableObject {
         targetWorkDaySeconds =
             savedTargetSeconds > 0 ? savedTargetSeconds : Defaults.targetWorkDaySeconds
 
-        // Default to enabled if not set
-        if UserDefaults.standard.object(forKey: Keys.screenOverlayEnabled) == nil {
-            screenOverlayEnabled = true
-        } else {
-            screenOverlayEnabled = UserDefaults.standard.bool(forKey: Keys.screenOverlayEnabled)
-        }
+        // Default to disabled if not set
+        screenOverlayEnabled = UserDefaults.standard.bool(forKey: Keys.screenOverlayEnabled)
 
-        // Default Zoom standing reminder to enabled if not set
-        if UserDefaults.standard.object(forKey: Keys.zoomStandingReminderEnabled) == nil {
-            zoomStandingReminderEnabled = true
-        } else {
-            zoomStandingReminderEnabled = UserDefaults.standard.bool(forKey: Keys.zoomStandingReminderEnabled)
-        }
+        // Default Zoom standing reminder to disabled if not set
+        zoomStandingReminderEnabled = UserDefaults.standard.bool(forKey: Keys.zoomStandingReminderEnabled)
 
         loadState()
         setupZoomDetector()

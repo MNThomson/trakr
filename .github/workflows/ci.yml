@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  lint:
+    name: SwiftLint
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install swiftlint
+      - name: Run SwiftLint
+        run: swiftlint lint --strict trakr/
+
+  format:
+    name: swift-format
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install swift-format
+      - name: Check Formatting
+        run: swift-format lint --strict --recursive trakr/
+
+  build:
+    name: Build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: XCode Build
+        run: xcodebuild -scheme trakr -configuration Debug -derivedDataPath ./build build

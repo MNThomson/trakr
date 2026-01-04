@@ -86,7 +86,7 @@ class MenuBarController {
 
         // Target Work Day submenu
         let targetSubmenu = createTargetDurationSubmenu()
-        let targetItem = NSMenuItem(title: "Target Work Day", action: nil, keyEquivalent: "")
+        let targetItem = NSMenuItem(title: "Daily Hours Goal", action: nil, keyEquivalent: "")
         targetItem.submenu = targetSubmenu
         settingsSubmenu.addItem(targetItem)
 
@@ -99,7 +99,7 @@ class MenuBarController {
 
         // Zoom Standing Reminder toggle
         let zoomReminderItem = createMenuItem(
-            title: "Zoom Standing Reminder", action: #selector(toggleZoomStandingReminder))
+            title: "Stand Up for Zoom", action: #selector(toggleZoomStandingReminder))
         zoomReminderItem.state = ActivityTracker.shared.zoomStandingReminderEnabled ? .on : .off
         settingsSubmenu.addItem(zoomReminderItem)
 
@@ -180,13 +180,13 @@ class MenuBarController {
 
         // Post-Zoom Stretch toggle
         let postZoomStretchItem = createMenuItem(
-            title: "Post-Zoom Stretch", action: #selector(togglePostZoomStretch))
+            title: "Stretch After Zoom", action: #selector(togglePostZoomStretch))
         postZoomStretchItem.state = ActivityTracker.shared.postZoomStretchEnabled ? .on : .off
         settingsSubmenu.addItem(postZoomStretchItem)
 
         // Wind Down Timing submenu (Disabled = 0)
         let windDownTimingSubmenu = createWindDownTimingSubmenu()
-        let windDownTimingItem = NSMenuItem(title: "End-of-Day Wind Down", action: nil, keyEquivalent: "")
+        let windDownTimingItem = NSMenuItem(title: "Wrap-Up Reminder", action: nil, keyEquivalent: "")
         windDownTimingItem.submenu = windDownTimingSubmenu
         windDownTimingItem.state = ActivityTracker.shared.windDownMinutes > 0 ? .on : .off
         settingsSubmenu.addItem(windDownTimingItem)
@@ -617,7 +617,7 @@ class MenuBarController {
     @objc private func showCustomWindDownTimingInput() {
         let currentMinutes = ActivityTracker.shared.windDownMinutes
         showCustomInput(
-            title: "Set Wind Down Timing",
+            title: "Set Wrap-Up Timing",
             message: "Enter minutes before goal to show reminder:",
             currentValue: String(currentMinutes),
             validate: { Int($0).flatMap { $0 > 0 && $0 <= 120 ? $0 : nil } },
@@ -739,7 +739,7 @@ class MenuBarController {
     @objc private func showCustomDurationInput() {
         let currentHours = Double(ActivityTracker.shared.targetWorkDaySeconds) / 3600.0
         showCustomInput(
-            title: "Set Target Work Day",
+            title: "Set Daily Hours Goal",
             message: "Enter duration in hours (e.g., 7.5):",
             currentValue: String(format: "%.1f", currentHours),
             validate: { Double($0).flatMap { $0 > 0 && $0 <= 24 ? Int($0 * 3600) : nil } },

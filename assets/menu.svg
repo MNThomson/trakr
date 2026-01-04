@@ -34,11 +34,11 @@
             stroke-linecap="round" stroke-dasharray="94 157" transform="rotate(-90 28 28)"/>
     <!-- Active time text -->
     <text x="28" y="32" font-family="-apple-system, SF Pro Rounded, system-ui, sans-serif" 
-          font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle">4:32</text>
+          font-size="11" font-weight="600" fill="#ffffff" text-anchor="middle">4h32m</text>
   </g>
   
   <!-- Time Info Section -->
-  <g transform="translate(94, 49)">
+  <g transform="translate(94, 44)">
     <!-- Start time row -->
     <g>
       <text x="0" y="12" font-family="-apple-system, SF Pro Text, system-ui, sans-serif" 

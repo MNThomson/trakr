@@ -66,7 +66,7 @@ class ActivityTracker: ObservableObject {
     var formattedActiveTime: String {
         let hours = activeSeconds / 3600
         let minutes = (activeSeconds % 3600) / 60
-        return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
+        return hours > 0 ? "\(hours)h\(minutes)m" : "\(minutes)m"
     }
 
     var formattedWorkStartTime: String? {
@@ -81,6 +81,15 @@ class ActivityTracker: ObservableObject {
         let remainingSeconds = targetWorkDaySeconds - activeSeconds
         let estimatedFinish = Date().addingTimeInterval(TimeInterval(remainingSeconds))
         return timeFormatter.string(from: estimatedFinish)
+    }
+
+    var formattedIdleTime: String? {
+        guard let start = workStartTime else { return nil }
+        let elapsedSeconds = Int(Date().timeIntervalSince(start))
+        let idleSeconds = max(0, elapsedSeconds - activeSeconds)
+        let hours = idleSeconds / 3600
+        let minutes = (idleSeconds % 3600) / 60
+        return hours > 0 ? "\(hours)h\(minutes)m" : "\(minutes)m"
     }
 
     // MARK: - Initialization

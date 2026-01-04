@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import SwiftUI
 
 class MenuBarController {
 
@@ -12,6 +13,7 @@ class MenuBarController {
     private var settingsSubmenu: NSMenu
     private var cancellables = Set<AnyCancellable>()
     private var updateTimer: Timer?
+    private var progressHostingView: NSHostingView<ProgressRingView>?
 
     private let presetDurations = [
         (title: "7.5 hours", seconds: 7 * 3600 + 30 * 60),
@@ -166,75 +168,28 @@ class MenuBarController {
 
     // MARK: - UI Updates
 
-    private func styledText(icon: String, value: String) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        let font = NSFont.menuFont(ofSize: 0)
+    private func createProgressRingView() -> ProgressRingView {
+        let tracker = ActivityTracker.shared
+        let progress = Double(tracker.activeSeconds) / Double(tracker.targetWorkDaySeconds)
 
-        let iconAttrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.secondaryLabelColor,
-            .font: font,
-        ]
-        let valueAttrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.labelColor,
-            .font: font,
-        ]
-
-        result.append(NSAttributedString(string: icon + " ", attributes: iconAttrs))
-        result.append(NSAttributedString(string: value, attributes: valueAttrs))
-        return result
-    }
-
-    private func createInfoLabel(icon: String, value: String, tag: Int) -> NSTextField {
-        let label = NSTextField(labelWithAttributedString: styledText(icon: icon, value: value))
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.tag = tag
-        return label
+        return ProgressRingView(
+            progress: progress,
+            activeTime: tracker.formattedActiveTime,
+            startTime: tracker.formattedWorkStartTime ?? "—",
+            finishTime: tracker.formattedEstimatedFinishTime ?? "—",
+            idleTime: tracker.formattedIdleTime ?? "—"
+        )
     }
 
     private func createInfoView() -> NSView {
-        let start = ActivityTracker.shared.formattedWorkStartTime ?? "—"
-        let active = ActivityTracker.shared.formattedActiveTime
-        let finish = ActivityTracker.shared.formattedEstimatedFinishTime ?? "—"
-
-        let leftLabel = createInfoLabel(icon: "☼", value: start, tag: 1)
-        let centerLabel = createInfoLabel(icon: "⧖", value: active, tag: 2)
-        let rightLabel = createInfoLabel(icon: "⚑", value: finish, tag: 3)
-
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 22))
-        container.addSubview(leftLabel)
-        container.addSubview(centerLabel)
-        container.addSubview(rightLabel)
-
-        NSLayoutConstraint.activate([
-            leftLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
-            leftLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-
-            centerLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            centerLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-
-            rightLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
-            rightLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-        ])
-
-        return container
+        let hostingView = NSHostingView(rootView: createProgressRingView())
+        hostingView.frame = NSRect(x: 0, y: 0, width: 185, height: 96)
+        progressHostingView = hostingView
+        return hostingView
     }
 
     private func updateInfoView() {
-        guard let container = infoMenuItem.view else { return }
-
-        let start = ActivityTracker.shared.formattedWorkStartTime ?? "—"
-        let active = ActivityTracker.shared.formattedActiveTime
-        let finish = ActivityTracker.shared.formattedEstimatedFinishTime ?? "—"
-
-        if let leftLabel = container.viewWithTag(1) as? NSTextField {
-            leftLabel.attributedStringValue = styledText(icon: "☼", value: start)
-        }
-        if let centerLabel = container.viewWithTag(2) as? NSTextField {
-            centerLabel.attributedStringValue = styledText(icon: "⧖", value: active)
-        }
-        if let rightLabel = container.viewWithTag(3) as? NSTextField {
-            rightLabel.attributedStringValue = styledText(icon: "⚑", value: finish)
-        }
+        progressHostingView?.rootView = createProgressRingView()
     }
 
     private func updateMenuItemTitle() {

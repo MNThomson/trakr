@@ -15,6 +15,7 @@ class ActivityTracker: ObservableObject {
         static let targetWorkDaySeconds = "targetWorkDaySeconds"
         static let goalReachedTime = "goalReachedTime"
         static let screenOverlayEnabled = "screenOverlayEnabled"
+        static let zoomStandingReminderEnabled = "zoomStandingReminderEnabled"
     }
 
     private enum Defaults {
@@ -57,8 +58,15 @@ class ActivityTracker: ObservableObject {
         didSet { UserDefaults.standard.set(screenOverlayEnabled, forKey: Keys.screenOverlayEnabled) }
     }
 
+    var zoomStandingReminderEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(zoomStandingReminderEnabled, forKey: Keys.zoomStandingReminderEnabled)
+        }
+    }
+
     private var timer: Timer?
     private var goalReachedTime: Date?
+    private var isInZoomMeeting: Bool = false
 
     private lazy var timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -126,6 +134,13 @@ class ActivityTracker: ObservableObject {
             screenOverlayEnabled = true
         } else {
             screenOverlayEnabled = UserDefaults.standard.bool(forKey: Keys.screenOverlayEnabled)
+        }
+
+        // Default Zoom standing reminder to enabled if not set
+        if UserDefaults.standard.object(forKey: Keys.zoomStandingReminderEnabled) == nil {
+            zoomStandingReminderEnabled = true
+        } else {
+            zoomStandingReminderEnabled = UserDefaults.standard.bool(forKey: Keys.zoomStandingReminderEnabled)
         }
 
         loadState()
@@ -199,6 +214,9 @@ class ActivityTracker: ObservableObject {
             resetForNewWorkDay()
         }
 
+        // Check for Zoom meeting state changes (independent of pause state)
+        checkZoomMeetingStateChange()
+
         let isInputActive = getSystemIdleTime() < idleThreshold
         let hasPowerAssertion = hasActivePowerAssertions()
         isCurrentlyActive = isInputActive || hasPowerAssertion
@@ -247,6 +265,64 @@ class ActivityTracker: ObservableObject {
         ]
 
         return activeTypes.contains { dict[$0] ?? 0 > 0 }
+    }
+
+    // MARK: - Zoom Meeting Detection
+
+    private func checkForZoomMeeting() -> Bool {
+        // CptHost is a Zoom helper process that runs when you're in a meeting
+        let runningApps = NSWorkspace.shared.runningApplications
+        return runningApps.contains { app in
+            guard let bundleId = app.bundleIdentifier else { return false }
+            // CptHost.app is spawned when joining a Zoom meeting
+            return bundleId == "us.zoom.CptHost"
+        }
+    }
+
+    private func checkZoomMeetingStateChange() {
+        guard zoomStandingReminderEnabled else { return }
+
+        let inMeetingNow = checkForZoomMeeting()
+
+        // Trigger notification on transition: not in meeting -> in meeting
+        if inMeetingNow && !isInZoomMeeting {
+            // Delay notification by 10 seconds, verify still in meeting before sending
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+                guard let self = self,
+                      self.zoomStandingReminderEnabled,
+                      self.checkForZoomMeeting() else { return }
+                self.sendStandingReminder()
+            }
+        }
+
+        isInZoomMeeting = inMeetingNow
+    }
+
+    private func sendStandingReminder() {
+        let content = UNMutableNotificationContent()
+        content.title = "Stand Up!"
+        content.body = "You joined a Zoom meeting - time to use your standing desk!"
+        content.sound = .default
+
+        // Use UUID to ensure each notification comes through independently
+        let notificationId = "zoomStanding-\(UUID().uuidString)"
+        let request = UNNotificationRequest(
+            identifier: notificationId,
+            content: content,
+            trigger: nil
+        )
+
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Failed to send standing reminder: \(error)")
+            }
+        }
+
+        // Auto-dismiss after 10 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+            UNUserNotificationCenter.current().removeDeliveredNotifications(
+                withIdentifiers: [notificationId])
+        }
     }
 
     // MARK: - Work Day Logic

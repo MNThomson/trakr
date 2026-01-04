@@ -93,6 +93,12 @@ class MenuBarController {
         overlayItem.state = ActivityTracker.shared.screenOverlayEnabled ? .on : .off
         settingsSubmenu.addItem(overlayItem)
 
+        // Zoom Standing Reminder toggle
+        let zoomReminderItem = createMenuItem(
+            title: "Zoom Standing Reminder", action: #selector(toggleZoomStandingReminder))
+        zoomReminderItem.state = ActivityTracker.shared.zoomStandingReminderEnabled ? .on : .off
+        settingsSubmenu.addItem(zoomReminderItem)
+
         updateSettingsMenuStates()
         menu.addItem(settingsMenuItem)
     }
@@ -346,6 +352,11 @@ class MenuBarController {
         if !ActivityTracker.shared.screenOverlayEnabled {
             ScreenOverlayController.shared.hideOverlayPermanently()
         }
+    }
+
+    @objc private func toggleZoomStandingReminder(_ sender: NSMenuItem) {
+        ActivityTracker.shared.zoomStandingReminderEnabled.toggle()
+        sender.state = ActivityTracker.shared.zoomStandingReminderEnabled ? .on : .off
     }
 
     @objc private func setIdleThreshold(_ sender: NSMenuItem) {

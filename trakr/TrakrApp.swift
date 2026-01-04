@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import ServiceManagement
 
 @main
 struct TrakrApp: App {
@@ -17,9 +18,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         menuBarController = MenuBarController()
+        enableLaunchAtLogin()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         ActivityTracker.shared.saveState()
+    }
+
+    private func enableLaunchAtLogin() {
+        do {
+            if SMAppService.mainApp.status != .enabled {
+                try SMAppService.mainApp.register()
+            }
+        } catch {
+            print("Failed to enable launch at login: \(error)")
+        }
     }
 }

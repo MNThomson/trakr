@@ -13,7 +13,7 @@ class ActivityTracker: ObservableObject {
         static let workStartTime = "workStartTime"
         static let idleThreshold = "idleThreshold"
         static let targetWorkDaySeconds = "targetWorkDaySeconds"
-        static let dailyGoalNotificationSent = "dailyGoalNotificationSent"
+        static let goalReachedTime = "goalReachedTime"
     }
 
     private enum Defaults {
@@ -53,7 +53,7 @@ class ActivityTracker: ObservableObject {
     }
 
     private var timer: Timer?
-    private var dailyGoalNotificationSent = false
+    private var goalReachedTime: Date?
 
     private lazy var timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -75,7 +75,10 @@ class ActivityTracker: ObservableObject {
 
     var formattedEstimatedFinishTime: String? {
         guard workStartTime != nil else { return nil }
-        let remainingSeconds = max(0, targetWorkDaySeconds - activeSeconds)
+        if let goalTime = goalReachedTime {
+            return timeFormatter.string(from: goalTime)
+        }
+        let remainingSeconds = targetWorkDaySeconds - activeSeconds
         let estimatedFinish = Date().addingTimeInterval(TimeInterval(remainingSeconds))
         return timeFormatter.string(from: estimatedFinish)
     }
@@ -125,8 +128,7 @@ class ActivityTracker: ObservableObject {
         if isSameWorkDay(lastDate, as: Date()) {
             activeSeconds = UserDefaults.standard.integer(forKey: Keys.activeSeconds)
             workStartTime = UserDefaults.standard.object(forKey: Keys.workStartTime) as? Date
-            dailyGoalNotificationSent = UserDefaults.standard.bool(
-                forKey: Keys.dailyGoalNotificationSent)
+            goalReachedTime = UserDefaults.standard.object(forKey: Keys.goalReachedTime) as? Date
         } else {
             resetForNewWorkDay()
         }
@@ -135,12 +137,12 @@ class ActivityTracker: ObservableObject {
     private func resetToInitialState() {
         activeSeconds = 0
         workStartTime = nil
-        dailyGoalNotificationSent = false
+        goalReachedTime = nil
     }
 
     private func resetForNewWorkDay() {
         resetToInitialState()
-        UserDefaults.standard.set(false, forKey: Keys.dailyGoalNotificationSent)
+        UserDefaults.standard.removeObject(forKey: Keys.goalReachedTime)
         saveState()
     }
 
@@ -174,7 +176,9 @@ class ActivityTracker: ObservableObject {
 
         activeSeconds += 1
 
-        if activeSeconds >= targetWorkDaySeconds && !dailyGoalNotificationSent {
+        if activeSeconds >= targetWorkDaySeconds && goalReachedTime == nil {
+            goalReachedTime = now
+            UserDefaults.standard.set(now, forKey: Keys.goalReachedTime)
             sendDailyGoalNotification()
         }
 
@@ -234,11 +238,6 @@ class ActivityTracker: ObservableObject {
     }
 
     private func sendDailyGoalNotification() {
-        guard !dailyGoalNotificationSent else { return }
-
-        dailyGoalNotificationSent = true
-        UserDefaults.standard.set(true, forKey: Keys.dailyGoalNotificationSent)
-
         let content = UNMutableNotificationContent()
         content.title = "🎉 Daily Goal Reached!"
         content.body = "You've completed \(formattedActiveTime) of work today. Great job!"

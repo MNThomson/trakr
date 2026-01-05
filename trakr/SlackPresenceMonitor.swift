@@ -21,7 +21,8 @@ class SlackPresenceMonitor: ObservableObject {
     }
 
     private enum Defaults {
-        static let reconnectInterval: TimeInterval = 540  // 9 minutes
+        static let heartbeatTimeout: TimeInterval = 300  // 5 minutes without messages = stale
+        static let heartbeatCheckInterval: TimeInterval = 60  // Check every minute
     }
 
     // MARK: - Singleton
@@ -89,13 +90,16 @@ class SlackPresenceMonitor: ObservableObject {
 
     private var webSocketTask: URLSessionWebSocketTask?
     private var session: URLSession!
-    private var reconnectTimer: Timer?
+    private var heartbeatTimer: Timer?
     private var slackAppCheckTimer: Timer?
     private var onlineUsers: Set<String> = []
     private var usersInMeeting: Set<String> = []
     private var usersUnavailable: Set<String> = []
     private var messageId: Int = 1
     private var isConnected: Bool = false
+
+    // Message tracking for heartbeat monitoring
+    private var lastMessageTime: Date?
 
     /// Emojis that indicate the user is in a meeting or huddle
     private let meetingEmojis = [":calendar:", ":spiral_calendar_pad:", ":date:", ":headphones:"]
@@ -269,8 +273,8 @@ class SlackPresenceMonitor: ObservableObject {
         if isConnected {
             Self.log("WebSocket disconnecting")
         }
-        reconnectTimer?.invalidate()
-        reconnectTimer = nil
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         isConnected = false
@@ -284,6 +288,15 @@ class SlackPresenceMonitor: ObservableObject {
         slackAppCheckTimer?.invalidate()
         slackAppCheckTimer = nil
         disconnect()
+    }
+
+    /// Clears online status immediately (green dots disappear) without full disconnect
+    private func clearOnlineStatus() {
+        onlineUsers.removeAll()
+        usersInMeeting.removeAll()
+        usersUnavailable.removeAll()
+        isConnected = false
+        updateInitials()
     }
 
     func reconnect() {
@@ -314,9 +327,12 @@ class SlackPresenceMonitor: ObservableObject {
         webSocketTask?.resume()
         isConnected = true
 
+        // Initialize so heartbeat doesn't trigger immediately
+        lastMessageTime = Date()
+
         Self.log("WebSocket connecting")
         receiveMessage()
-        scheduleReconnect()
+        startHeartbeatMonitor()
 
         // Send presence subscription after a brief delay to ensure connection is ready
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
@@ -356,6 +372,7 @@ class SlackPresenceMonitor: ObservableObject {
         webSocketTask?.receive { [weak self] result in
             switch result {
             case .success(let message):
+                self?.lastMessageTime = Date()
                 switch message {
                 case .string(let text):
                     self?.handleMessage(text)
@@ -370,7 +387,14 @@ class SlackPresenceMonitor: ObservableObject {
 
             case .failure(let error):
                 Self.log("WebSocket receive error: \(error.localizedDescription)")
-                self?.scheduleReconnect()
+
+                // Immediately clear online status so green dots disappear
+                self?.clearOnlineStatus()
+
+                // Reconnect after brief delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    self?.reconnect()
+                }
             }
         }
     }
@@ -382,14 +406,10 @@ class SlackPresenceMonitor: ObservableObject {
         else { return }
 
         if type == "presence_change" {
-            Self.log("Received presence_change")
             handlePresenceChange(json)
         } else if type == "user_status_changed" {
-            Self.log("Received user_status_changed")
             handleStatusChange(json)
         } else if type == "user_change" {
-            // Slack sends user_change for profile/status updates
-            Self.log("Received user_change")
             handleUserChange(json)
         }
     }
@@ -569,18 +589,32 @@ class SlackPresenceMonitor: ObservableObject {
         initialsUnavailable = unavailableInitials
     }
 
-    private func scheduleReconnect() {
-        reconnectTimer?.invalidate()
-        reconnectTimer = Timer.scheduledTimer(
-            withTimeInterval: Defaults.reconnectInterval,
-            repeats: false
+    /// Starts monitoring for stale connections - only reconnects if no messages received
+    private func startHeartbeatMonitor() {
+        heartbeatTimer?.invalidate()
+
+        // Use regular Timer - if it gets throttled, that's fine, we just check less often
+        heartbeatTimer = Timer.scheduledTimer(
+            withTimeInterval: Defaults.heartbeatCheckInterval,
+            repeats: true
         ) { [weak self] _ in
-            Self.log("Scheduled reconnect")
-            self?.webSocketTask?.cancel(with: .goingAway, reason: nil)
-            self?.connect()
+            self?.checkHeartbeat()
         }
-        if let timer = reconnectTimer {
+        if let timer = heartbeatTimer {
             RunLoop.current.add(timer, forMode: .common)
+        }
+    }
+
+    /// Checks if connection is stale (no messages for too long) and reconnects if needed
+    private func checkHeartbeat() {
+        guard isConnected, let lastMsg = lastMessageTime else { return }
+
+        let timeSinceLastMessage = Date().timeIntervalSince(lastMsg)
+
+        if timeSinceLastMessage > Defaults.heartbeatTimeout {
+            Self.log("Connection stale, reconnecting...")
+            clearOnlineStatus()
+            reconnect()
         }
     }
 }

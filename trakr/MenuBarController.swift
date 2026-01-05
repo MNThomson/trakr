@@ -358,6 +358,11 @@ class MenuBarController {
             .sink { [weak self] _ in self?.updateStatusIcon() }
             .store(in: &cancellables)
 
+        SlackPresenceMonitor.shared.$initialsUnavailable
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateStatusIcon() }
+            .store(in: &cancellables)
+
         SlackPresenceMonitor.shared.$isMeActive
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateStatusIcon() }
@@ -447,6 +452,7 @@ class MenuBarController {
         // Display online coworker initials with smaller font
         let initials = SlackPresenceMonitor.shared.onlineInitials
         let initialsInMeeting = SlackPresenceMonitor.shared.initialsInMeeting
+        let initialsUnavailable = SlackPresenceMonitor.shared.initialsUnavailable
         if initials.isEmpty {
             button.attributedTitle = NSAttributedString(string: "")
         } else {
@@ -454,12 +460,24 @@ class MenuBarController {
             let baseAttributes: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 12)
             ]
-            let underlineAttributes: [NSAttributedString.Key: Any] = [
+            let meetingAttributes: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 12),
                 .underlineStyle: NSUnderlineStyle.single.rawValue,
             ]
+            let unavailableAttributes: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 12),
+                .underlineStyle:
+                    (NSUnderlineStyle.single.rawValue | NSUnderlineStyle.patternDot.rawValue),
+            ]
             for char in initials {
-                let attrs = initialsInMeeting.contains(char) ? underlineAttributes : baseAttributes
+                let attrs: [NSAttributedString.Key: Any]
+                if initialsInMeeting.contains(char) {
+                    attrs = meetingAttributes
+                } else if initialsUnavailable.contains(char) {
+                    attrs = unavailableAttributes
+                } else {
+                    attrs = baseAttributes
+                }
                 attributed.append(NSAttributedString(string: String(char), attributes: attrs))
             }
             attributed.append(NSAttributedString(string: " ", attributes: baseAttributes))

@@ -32,6 +32,7 @@ class SlackPresenceMonitor: ObservableObject {
 
     @Published private(set) var onlineInitials: String = ""
     @Published private(set) var initialsInMeeting: Set<Character> = []
+    @Published private(set) var initialsUnavailable: Set<Character> = []
     @Published private(set) var isMeActive: Bool = false
 
     // MARK: - Properties
@@ -92,11 +93,18 @@ class SlackPresenceMonitor: ObservableObject {
     private var slackAppCheckTimer: Timer?
     private var onlineUsers: Set<String> = []
     private var usersInMeeting: Set<String> = []
+    private var usersUnavailable: Set<String> = []
     private var messageId: Int = 1
     private var isConnected: Bool = false
 
     /// Emojis that indicate the user is in a meeting or huddle
     private let meetingEmojis = [":calendar:", ":spiral_calendar_pad:", ":date:", ":headphones:"]
+
+    /// Emojis that indicate the user is unavailable (lunch, busy, etc.)
+    private let unavailableEmojis = [":yay-eating-hotdog:", ":sandwich:", ":no_entry:"]
+
+    /// Keywords in status text that indicate unavailability
+    private let unavailableKeywords = ["food", "lunch"]
 
     // MARK: - Initialization
 
@@ -266,6 +274,7 @@ class SlackPresenceMonitor: ObservableObject {
         isConnected = false
         onlineUsers.removeAll()
         usersInMeeting.removeAll()
+        usersUnavailable.removeAll()
         updateInitials()
     }
 
@@ -421,7 +430,9 @@ class SlackPresenceMonitor: ObservableObject {
         else { return }
 
         let statusEmoji = profile["status_emoji"] as? String ?? ""
+        let statusText = profile["status_text"] as? String ?? ""
         let inMeeting = meetingEmojis.contains(statusEmoji)
+        let isUnavailable = checkUnavailable(emoji: statusEmoji, text: statusText)
 
         DispatchQueue.main.async {
             if inMeeting {
@@ -429,8 +440,24 @@ class SlackPresenceMonitor: ObservableObject {
             } else {
                 self.usersInMeeting.remove(userId)
             }
+
+            if isUnavailable {
+                self.usersUnavailable.insert(userId)
+            } else {
+                self.usersUnavailable.remove(userId)
+            }
+
             self.updateInitials()
         }
+    }
+
+    /// Checks if status emoji or text indicates user is unavailable
+    private func checkUnavailable(emoji: String, text: String) -> Bool {
+        if unavailableEmojis.contains(emoji) {
+            return true
+        }
+        let lowerText = text.lowercased()
+        return unavailableKeywords.contains { lowerText.contains($0) }
     }
 
     /// Fetches the current status emoji for all coworkers on connection
@@ -458,7 +485,9 @@ class SlackPresenceMonitor: ObservableObject {
                 else { return }
 
                 let statusEmoji = profile["status_emoji"] as? String ?? ""
+                let statusText = profile["status_text"] as? String ?? ""
                 let inMeeting = self.meetingEmojis.contains(statusEmoji)
+                let isUnavailable = self.checkUnavailable(emoji: statusEmoji, text: statusText)
 
                 DispatchQueue.main.async {
                     if inMeeting {
@@ -466,6 +495,13 @@ class SlackPresenceMonitor: ObservableObject {
                     } else {
                         self.usersInMeeting.remove(userId)
                     }
+
+                    if isUnavailable {
+                        self.usersUnavailable.insert(userId)
+                    } else {
+                        self.usersUnavailable.remove(userId)
+                    }
+
                     self.updateInitials()
                 }
             }.resume()
@@ -484,6 +520,7 @@ class SlackPresenceMonitor: ObservableObject {
         isMeActive = meIsActive
 
         var meetingInitials: Set<Character> = []
+        var unavailableInitials: Set<Character> = []
         let initials =
             onlineUsers
             .compactMap { userId -> String? in
@@ -495,12 +532,17 @@ class SlackPresenceMonitor: ObservableObject {
                 if showMeetingStatus && usersInMeeting.contains(userId) {
                     meetingInitials.insert(initial)
                 }
+                // Track which initials are unavailable when showMeetingStatus is enabled
+                if showMeetingStatus && usersUnavailable.contains(userId) {
+                    unavailableInitials.insert(initial)
+                }
                 return String(initial)
             }
             .sorted { $0.lowercased() < $1.lowercased() }
             .joined()
         onlineInitials = initials
         initialsInMeeting = meetingInitials
+        initialsUnavailable = unavailableInitials
     }
 
     private func scheduleReconnect() {

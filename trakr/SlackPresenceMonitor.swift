@@ -212,10 +212,6 @@ class SlackPresenceMonitor: ObservableObject {
         }
     }
 
-    var isConfigured: Bool {
-        !cookie.isEmpty && !token.isEmpty && !coworkers.isEmpty
-    }
-
     // MARK: - WebSocket Connection
 
     private func connect() {

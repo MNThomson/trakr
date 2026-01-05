@@ -25,9 +25,6 @@ class ActivityTracker: ObservableObject {
         static let targetWorkDaySeconds = 8 * 3600
         static let workDayStartHour = 4
         static let saveInterval = 30
-        static let eyeBreakIntervalMinutes = 20
-        static let windDownMinutes = 20
-        static let sunsetAlertMinutes = 30
     }
 
     // MARK: - Singleton

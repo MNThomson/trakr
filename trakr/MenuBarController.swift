@@ -940,9 +940,37 @@ class MenuBarController {
 
         guard !cookie.isEmpty, !token.isEmpty else { return }
 
-        SlackPresenceMonitor.shared.cookie = cookie
-        SlackPresenceMonitor.shared.token = token
-        SlackPresenceMonitor.shared.reconnect()
+        // Validate credentials before saving
+        Task {
+            do {
+                let teamName = try await SlackPresenceMonitor.shared.validateCredentials(
+                    cookie: cookie, token: token)
+                await MainActor.run {
+                    // Save credentials on success
+                    SlackPresenceMonitor.shared.cookie = cookie
+                    SlackPresenceMonitor.shared.token = token
+                    SlackPresenceMonitor.shared.reconnect()
+
+                    // Show success message
+                    let successAlert = NSAlert()
+                    successAlert.messageText = "Credentials Validated"
+                    successAlert.informativeText = "Successfully connected to \(teamName)"
+                    successAlert.alertStyle = .informational
+                    successAlert.addButton(withTitle: "OK")
+                    successAlert.runModal()
+                }
+            } catch {
+                await MainActor.run {
+                    // Show error message
+                    let errorAlert = NSAlert()
+                    errorAlert.messageText = "Invalid Credentials"
+                    errorAlert.informativeText = error.localizedDescription
+                    errorAlert.alertStyle = .critical
+                    errorAlert.addButton(withTitle: "OK")
+                    errorAlert.runModal()
+                }
+            }
+        }
     }
 
     @objc private func showSlackCoworkersInput() {
@@ -950,7 +978,8 @@ class MenuBarController {
 
         let alert = NSAlert()
         alert.messageText = "Slack User IDs"
-        alert.informativeText = "Enter one coworker per line (format: ID:Name):\ne.g., U01ABC:Alice\n\nTip: Use \"Me\" as a name to show a green dot\nwhen you're active (instead of initials)."
+        alert.informativeText =
+            "Enter one coworker per line (format: ID:Name):\ne.g., U01ABC:Alice\n\nTip: Use \"Me\" as a name to show a green dot\nwhen you're active (instead of initials)."
         alert.addButton(withTitle: "OK")
         alert.addButton(withTitle: "Cancel")
 

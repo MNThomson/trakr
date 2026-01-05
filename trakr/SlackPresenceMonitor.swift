@@ -1,7 +1,12 @@
 import AppKit
 import Foundation
+import os.log
 
 class SlackPresenceMonitor: ObservableObject {
+
+    // MARK: - Logging
+
+    private static let logger = Logger(subsystem: "ca.trakr.app", category: "SlackPresence")
 
     // MARK: - Constants
 
@@ -117,31 +122,97 @@ class SlackPresenceMonitor: ObservableObject {
     }
 
     private func setupWakeObserver() {
+        // Handle full system wake from sleep
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             guard let self = self, self.isEnabled else { return }
-            print("Mac woke from sleep, reconnecting Slack WebSocket...")
+            Self.logger.info("System wake, reconnecting")
             // Brief delay to let network come back up
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 self.reconnect()
+            }
+        }
+
+        // Handle display wake (screen turned on without full sleep)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.screensDidWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self, self.isEnabled else { return }
+            Self.logger.info("Screen wake, reconnecting")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                self.reconnect()
+            }
+        }
+    }
+
+    // MARK: - Errors
+
+    enum ValidationError: LocalizedError {
+        case invalidCredentials(String)
+        case networkError(Error)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidCredentials(let message):
+                return message
+            case .networkError(let error):
+                return "Network error: \(error.localizedDescription)"
             }
         }
     }
 
     // MARK: - Public Methods
 
+    /// Validates Slack credentials by calling the auth.test API
+    /// - Returns: The team name on success
+    /// - Throws: ValidationError if credentials are invalid or network fails
+    func validateCredentials(cookie: String, token: String) async throws -> String {
+        guard let url = URL(string: "https://slack.com/api/auth.test") else {
+            throw ValidationError.invalidCredentials("Invalid API URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("d=\(cookie)", forHTTPHeaderField: "Cookie")
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw ValidationError.networkError(error)
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ValidationError.invalidCredentials("Invalid response from Slack")
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            throw ValidationError.invalidCredentials("HTTP error: \(httpResponse.statusCode)")
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw ValidationError.invalidCredentials("Invalid JSON response")
+        }
+
+        guard let ok = json["ok"] as? Bool, ok else {
+            let error = json["error"] as? String ?? "Unknown error"
+            throw ValidationError.invalidCredentials("Slack API error: \(error)")
+        }
+
+        let team = json["team"] as? String ?? "Unknown team"
+        return team
+    }
+
     func start() {
-        guard isEnabled else {
-            print("Slack presence monitoring is disabled")
-            return
-        }
-        guard !cookie.isEmpty, !token.isEmpty, !coworkers.isEmpty else {
-            print("Slack credentials or coworkers not configured")
-            return
-        }
+        guard isEnabled else { return }
+        guard !cookie.isEmpty, !token.isEmpty, !coworkers.isEmpty else { return }
         if requireSlackApp {
             startSlackAppMonitoring()
         } else {
@@ -168,10 +239,10 @@ class SlackPresenceMonitor: ObservableObject {
         let slackIsRunning = isSlackRunning()
 
         if slackIsRunning && !isConnected {
-            print("Slack app detected, connecting WebSocket...")
+            Self.logger.info("Slack app detected, connecting")
             connect()
         } else if !slackIsRunning && isConnected {
-            print("Slack app closed, disconnecting WebSocket...")
+            Self.logger.info("Slack app closed, disconnecting")
             disconnect()
         }
     }
@@ -183,6 +254,9 @@ class SlackPresenceMonitor: ObservableObject {
     }
 
     private func disconnect() {
+        if isConnected {
+            Self.logger.info("WebSocket disconnecting")
+        }
         reconnectTimer?.invalidate()
         reconnectTimer = nil
         webSocketTask?.cancel(with: .goingAway, reason: nil)
@@ -216,7 +290,7 @@ class SlackPresenceMonitor: ObservableObject {
 
     private func connect() {
         guard let url = URL(string: "wss://wss-primary.slack.com/?token=\(token)") else {
-            print("Invalid Slack WebSocket URL")
+            Self.logger.error("Invalid WebSocket URL")
             return
         }
 
@@ -227,7 +301,7 @@ class SlackPresenceMonitor: ObservableObject {
         webSocketTask?.resume()
         isConnected = true
 
-        print("Slack WebSocket connecting...")
+        Self.logger.info("WebSocket connecting")
         receiveMessage()
         scheduleReconnect()
 
@@ -251,15 +325,15 @@ class SlackPresenceMonitor: ObservableObject {
         guard let data = try? JSONSerialization.data(withJSONObject: subscribeMessage),
             let jsonString = String(data: data, encoding: .utf8)
         else {
-            print("Failed to serialize presence_sub message")
+            Self.logger.error("Failed to serialize presence_sub message")
             return
         }
 
         webSocketTask?.send(.string(jsonString)) { error in
             if let error = error {
-                print("Failed to send presence_sub: \(error)")
+                Self.logger.error("Failed to send presence_sub: \(error.localizedDescription)")
             } else {
-                print("Sent presence subscription for \(userIds.count) users")
+                Self.logger.info("WebSocket connected")
             }
         }
     }
@@ -281,7 +355,7 @@ class SlackPresenceMonitor: ObservableObject {
                 self?.receiveMessage()
 
             case .failure(let error):
-                print("WebSocket receive error: \(error)")
+                Self.logger.error("WebSocket receive error: \(error.localizedDescription)")
                 self?.scheduleReconnect()
             }
         }
@@ -391,6 +465,7 @@ class SlackPresenceMonitor: ObservableObject {
             withTimeInterval: Defaults.reconnectInterval,
             repeats: false
         ) { [weak self] _ in
+            Self.logger.info("Scheduled reconnect")
             self?.webSocketTask?.cancel(with: .goingAway, reason: nil)
             self?.connect()
         }

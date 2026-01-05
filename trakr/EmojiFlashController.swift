@@ -22,6 +22,7 @@ class EmojiFlashController {
 
     private var flashWindow: NSWindow?
     private var dismissTimer: Timer?
+    private var permanentWindow: NSWindow?
 
     // MARK: - Initialization
 
@@ -31,13 +32,42 @@ class EmojiFlashController {
 
     /// Flash an emoji in the upper-left corner of the main screen
     func flash(emoji: String) {
-        // Cancel any existing flash
         dismissTimer?.invalidate()
         flashWindow?.orderOut(nil)
 
-        guard let screen = NSScreen.main else { return }
+        guard let window = createEmojiWindow(emoji: emoji) else { return }
+        flashWindow = window
 
-        // Position in upper-left corner with padding
+        fadeIn(window: window)
+
+        dismissTimer = Timer.scheduledTimer(
+            withTimeInterval: fadeInDuration + stayDuration,
+            repeats: false
+        ) { [weak self] _ in
+            self?.dismissFlashWindow()
+        }
+    }
+
+    /// Show a permanent emoji in the upper-left corner (does not auto-dismiss)
+    func showPermanent(emoji: String) {
+        permanentWindow?.orderOut(nil)
+
+        guard let window = createEmojiWindow(emoji: emoji) else { return }
+        permanentWindow = window
+
+        fadeIn(window: window)
+    }
+
+    /// Hide the permanent emoji display
+    func hidePermanent() {
+        dismissPermanentWindow()
+    }
+
+    // MARK: - Private Methods
+
+    private func createEmojiWindow(emoji: String) -> NSWindow? {
+        guard let screen = NSScreen.main else { return nil }
+
         let windowFrame = NSRect(
             x: screen.visibleFrame.minX + padding,
             y: screen.visibleFrame.maxY - windowSize - padding,
@@ -58,49 +88,50 @@ class EmojiFlashController {
         window.hasShadow = true
         window.ignoresMouseEvents = true
         window.collectionBehavior = [.canJoinAllSpaces, .stationary]
-        window.alphaValue = 0.0  // Start invisible for fade-in
+        window.alphaValue = 0.0
 
-        // Create the emoji view
-        let contentView = EmojiFlashView(
+        window.contentView = EmojiFlashView(
             frame: NSRect(x: 0, y: 0, width: windowSize, height: windowSize),
             emoji: emoji,
             emojiSize: emojiSize,
             backgroundOpacity: backgroundOpacity,
             cornerRadius: cornerRadius
         )
-        window.contentView = contentView
 
-        flashWindow = window
         window.orderFrontRegardless()
+        return window
+    }
 
-        // Fade in
-        NSAnimationContext.runAnimationGroup({ context in
+    private func fadeIn(window: NSWindow) {
+        NSAnimationContext.runAnimationGroup { context in
             context.duration = fadeInDuration
             window.animator().alphaValue = 1.0
-        })
-
-        // Schedule fade-out after fade-in + stay duration
-        dismissTimer = Timer.scheduledTimer(
-            withTimeInterval: fadeInDuration + stayDuration,
-            repeats: false
-        ) { [weak self] _ in
-            self?.fadeOutAndDismiss()
         }
     }
 
-    // MARK: - Private Methods
-
-    private func fadeOutAndDismiss() {
+    private func dismissFlashWindow() {
         guard let window = flashWindow else { return }
+        fadeOutAndDismiss(window: window) { [weak self] in
+            self?.flashWindow = nil
+        }
+    }
 
+    private func dismissPermanentWindow() {
+        guard let window = permanentWindow else { return }
+        fadeOutAndDismiss(window: window) { [weak self] in
+            self?.permanentWindow = nil
+        }
+    }
+
+    private func fadeOutAndDismiss(window: NSWindow, completion: @escaping () -> Void) {
         NSAnimationContext.runAnimationGroup(
             { context in
                 context.duration = fadeOutDuration
                 window.animator().alphaValue = 0.0
             },
-            completionHandler: { [weak self] in
-                self?.flashWindow?.orderOut(nil)
-                self?.flashWindow = nil
+            completionHandler: {
+                window.orderOut(nil)
+                completion()
             })
     }
 }

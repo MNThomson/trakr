@@ -10,6 +10,7 @@ class MenuBarController {
     private var menu: NSMenu
     private var infoMenuItem: NSMenuItem
     private var pauseMenuItem: NSMenuItem
+    private var preventSleepMenuItem: NSMenuItem
     private var settingsSubmenu: NSMenu
     private var cancellables = Set<AnyCancellable>()
     private var updateTimer: Timer?
@@ -34,6 +35,7 @@ class MenuBarController {
         settingsSubmenu = NSMenu()
         infoMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         pauseMenuItem = NSMenuItem()
+        preventSleepMenuItem = NSMenuItem()
 
         setupStatusButton()
         setupMenu()
@@ -65,6 +67,10 @@ class MenuBarController {
         pauseMenuItem = createMenuItem(
             title: "Pause Tracking", action: #selector(togglePause), keyEquivalent: "p")
         menu.addItem(pauseMenuItem)
+
+        preventSleepMenuItem = createMenuItem(
+            title: "Prevent Sleep", action: #selector(togglePreventSleep), keyEquivalent: "s")
+        menu.addItem(preventSleepMenuItem)
 
         setupSettingsMenu()
 
@@ -603,6 +609,18 @@ class MenuBarController {
 
     @objc private func togglePause() {
         ActivityTracker.shared.togglePause()
+    }
+
+    @objc private func togglePreventSleep(_ sender: NSMenuItem) {
+        if IdleDetector.shared.isCaffeinateActive {
+            IdleDetector.shared.stopCaffeinate()
+            EmojiFlashController.shared.hidePermanent()
+            sender.state = .off
+        } else {
+            IdleDetector.shared.startCaffeinate()
+            EmojiFlashController.shared.showPermanent(emoji: "☕️")
+            sender.state = .on
+        }
     }
 
     @objc private func toggleScreenOverlay(_ sender: NSMenuItem) {

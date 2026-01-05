@@ -1,12 +1,13 @@
 import AppKit
 import Foundation
-import os.log
 
 class SlackPresenceMonitor: ObservableObject {
 
     // MARK: - Logging
 
-    private static let logger = Logger(subsystem: "ca.trakr.app", category: "SlackPresence")
+    private static func log(_ message: String) {
+        NSLog("[SlackPresence] %@", message)
+    }
 
     // MARK: - Constants
 
@@ -129,7 +130,7 @@ class SlackPresenceMonitor: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             guard let self = self, self.isEnabled else { return }
-            Self.logger.info("System wake, reconnecting")
+            Self.log("System wake, reconnecting")
             // Brief delay to let network come back up
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 self.reconnect()
@@ -143,7 +144,7 @@ class SlackPresenceMonitor: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             guard let self = self, self.isEnabled else { return }
-            Self.logger.info("Screen wake, reconnecting")
+            Self.log("Screen wake, reconnecting")
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 self.reconnect()
             }
@@ -239,10 +240,10 @@ class SlackPresenceMonitor: ObservableObject {
         let slackIsRunning = isSlackRunning()
 
         if slackIsRunning && !isConnected {
-            Self.logger.info("Slack app detected, connecting")
+            Self.log("Slack app detected, connecting")
             connect()
         } else if !slackIsRunning && isConnected {
-            Self.logger.info("Slack app closed, disconnecting")
+            Self.log("Slack app closed, disconnecting")
             disconnect()
         }
     }
@@ -255,7 +256,7 @@ class SlackPresenceMonitor: ObservableObject {
 
     private func disconnect() {
         if isConnected {
-            Self.logger.info("WebSocket disconnecting")
+            Self.log("WebSocket disconnecting")
         }
         reconnectTimer?.invalidate()
         reconnectTimer = nil
@@ -290,7 +291,7 @@ class SlackPresenceMonitor: ObservableObject {
 
     private func connect() {
         guard let url = URL(string: "wss://wss-primary.slack.com/?token=\(token)") else {
-            Self.logger.error("Invalid WebSocket URL")
+            Self.log("Invalid WebSocket URL")
             return
         }
 
@@ -301,7 +302,7 @@ class SlackPresenceMonitor: ObservableObject {
         webSocketTask?.resume()
         isConnected = true
 
-        Self.logger.info("WebSocket connecting")
+        Self.log("WebSocket connecting")
         receiveMessage()
         scheduleReconnect()
 
@@ -326,15 +327,15 @@ class SlackPresenceMonitor: ObservableObject {
         guard let data = try? JSONSerialization.data(withJSONObject: subscribeMessage),
             let jsonString = String(data: data, encoding: .utf8)
         else {
-            Self.logger.error("Failed to serialize presence_sub message")
+            Self.log("Failed to serialize presence_sub message")
             return
         }
 
         webSocketTask?.send(.string(jsonString)) { error in
             if let error = error {
-                Self.logger.error("Failed to send presence_sub: \(error.localizedDescription)")
+                Self.log("Failed to send presence_sub: \(error.localizedDescription)")
             } else {
-                Self.logger.info("WebSocket connected")
+                Self.log("WebSocket connected")
             }
         }
     }
@@ -356,7 +357,7 @@ class SlackPresenceMonitor: ObservableObject {
                 self?.receiveMessage()
 
             case .failure(let error):
-                Self.logger.error("WebSocket receive error: \(error.localizedDescription)")
+                Self.log("WebSocket receive error: \(error.localizedDescription)")
                 self?.scheduleReconnect()
             }
         }
@@ -505,7 +506,7 @@ class SlackPresenceMonitor: ObservableObject {
             withTimeInterval: Defaults.reconnectInterval,
             repeats: false
         ) { [weak self] _ in
-            Self.logger.info("Scheduled reconnect")
+            Self.log("Scheduled reconnect")
             self?.webSocketTask?.cancel(with: .goingAway, reason: nil)
             self?.connect()
         }

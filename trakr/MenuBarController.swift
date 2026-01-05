@@ -950,7 +950,7 @@ class MenuBarController {
 
         let alert = NSAlert()
         alert.messageText = "Slack User IDs"
-        alert.informativeText = "Enter one coworker per line (format: ID:Name):\ne.g., U01ABC:Alice"
+        alert.informativeText = "Enter one coworker per line (format: ID:Name):\ne.g., U01ABC:Alice\n\nTip: Use \"Me\" as a name to show a green dot\nwhen you're active (instead of initials)."
         alert.addButton(withTitle: "OK")
         alert.addButton(withTitle: "Cancel")
 
@@ -1000,6 +1000,7 @@ class MenuBarController {
 
     private func formatCoworkersForDisplay(multiline: Bool = false) -> String {
         SlackPresenceMonitor.shared.coworkers
+            .sorted { $0.value.lowercased() < $1.value.lowercased() }
             .map { "\($0.key):\($0.value)" }
             .joined(separator: multiline ? "\n" : ",")
     }

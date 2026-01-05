@@ -56,7 +56,17 @@ class SlackPresenceMonitor: ObservableObject {
         didSet {
             UserDefaults.standard.set(requireSlackApp, forKey: Keys.slackRequireApp)
             if isEnabled {
-                reconnect()
+                if requireSlackApp {
+                    // Starting to require Slack app - set up monitoring
+                    startSlackAppMonitoring()
+                } else {
+                    // No longer requiring Slack app - stop monitoring and connect
+                    slackAppCheckTimer?.invalidate()
+                    slackAppCheckTimer = nil
+                    if !isConnected {
+                        connect()
+                    }
+                }
             }
         }
     }

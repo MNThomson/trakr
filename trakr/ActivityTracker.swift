@@ -43,6 +43,11 @@ class ActivityTracker: ObservableObject {
     @Published var targetWorkDaySeconds: Int {
         didSet {
             UserDefaults.standard.set(targetWorkDaySeconds, forKey: Keys.targetWorkDaySeconds)
+            // Clear goal if new target exceeds current active time
+            if activeSeconds < targetWorkDaySeconds {
+                goalReachedTime = nil
+                UserDefaults.standard.removeObject(forKey: Keys.goalReachedTime)
+            }
         }
     }
 

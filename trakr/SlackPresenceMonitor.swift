@@ -382,9 +382,15 @@ class SlackPresenceMonitor: ObservableObject {
         else { return }
 
         if type == "presence_change" {
+            Self.log("Received presence_change")
             handlePresenceChange(json)
         } else if type == "user_status_changed" {
+            Self.log("Received user_status_changed")
             handleStatusChange(json)
+        } else if type == "user_change" {
+            // Slack sends user_change for profile/status updates
+            Self.log("Received user_change")
+            handleUserChange(json)
         }
     }
 
@@ -431,6 +437,22 @@ class SlackPresenceMonitor: ObservableObject {
             let profile = user["profile"] as? [String: Any]
         else { return }
 
+        processUserStatus(userId: userId, profile: profile)
+    }
+
+    /// Handles user_change events from Slack WebSocket (profile/status updates)
+    private func handleUserChange(_ json: [String: Any]) {
+        guard let user = json["user"] as? [String: Any],
+            let userId = user["id"] as? String,
+            coworkers[userId] != nil,
+            let profile = user["profile"] as? [String: Any]
+        else { return }
+
+        processUserStatus(userId: userId, profile: profile)
+    }
+
+    /// Processes user status from profile data (shared by handleStatusChange and handleUserChange)
+    private func processUserStatus(userId: String, profile: [String: Any]) {
         let statusEmoji = profile["status_emoji"] as? String ?? ""
         let statusText = profile["status_text"] as? String ?? ""
         let inMeeting = meetingEmojis.contains(statusEmoji)

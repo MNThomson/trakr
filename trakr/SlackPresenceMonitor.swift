@@ -308,6 +308,7 @@ class SlackPresenceMonitor: ObservableObject {
         // Send presence subscription after a brief delay to ensure connection is ready
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             self?.sendPresenceSubscription()
+            self?.fetchInitialStatuses()
         }
     }
 
@@ -427,6 +428,45 @@ class SlackPresenceMonitor: ObservableObject {
                 self.usersInMeeting.remove(userId)
             }
             self.updateInitials()
+        }
+    }
+
+    /// Fetches the current status emoji for all coworkers on connection
+    private func fetchInitialStatuses() {
+        let userIds = Array(coworkers.keys)
+        guard !userIds.isEmpty else { return }
+
+        for userId in userIds {
+            guard let url = URL(string: "https://slack.com/api/users.profile.get?user=\(userId)")
+            else {
+                continue
+            }
+
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("d=\(cookie)", forHTTPHeaderField: "Cookie")
+
+            URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+                guard let self = self,
+                    let data = data,
+                    error == nil,
+                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                    let ok = json["ok"] as? Bool, ok,
+                    let profile = json["profile"] as? [String: Any]
+                else { return }
+
+                let statusEmoji = profile["status_emoji"] as? String ?? ""
+                let inMeeting = self.meetingEmojis.contains(statusEmoji)
+
+                DispatchQueue.main.async {
+                    if inMeeting {
+                        self.usersInMeeting.insert(userId)
+                    } else {
+                        self.usersInMeeting.remove(userId)
+                    }
+                    self.updateInitials()
+                }
+            }.resume()
         }
     }
 

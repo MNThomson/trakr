@@ -101,7 +101,9 @@ class SlackPresenceMonitor: ObservableObject {
     private let meetingEmojis = [":calendar:", ":spiral_calendar_pad:", ":date:", ":headphones:"]
 
     /// Emojis that indicate the user is unavailable (lunch, busy, etc.)
-    private let unavailableEmojis = [":yay-eating-hotdog:", ":sandwich:", ":no_entry:"]
+    private let unavailableEmojis = [
+        ":yay-eating-hotdog:", ":sandwich:", ":no_entry:", ":fork_and_knife:", ":knife_fork_plate:",
+    ]
 
     /// Keywords in status text that indicate unavailability
     private let unavailableKeywords = ["food", "lunch"]

@@ -353,6 +353,11 @@ class MenuBarController {
             .sink { [weak self] _ in self?.updateStatusIcon() }
             .store(in: &cancellables)
 
+        SlackPresenceMonitor.shared.$initialsInMeeting
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateStatusIcon() }
+            .store(in: &cancellables)
+
         SlackPresenceMonitor.shared.$isMeActive
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateStatusIcon() }
@@ -439,9 +444,27 @@ class MenuBarController {
 
         button.imagePosition = .imageRight
 
-        // Display online coworker initials
+        // Display online coworker initials with smaller font
         let initials = SlackPresenceMonitor.shared.onlineInitials
-        button.title = initials.isEmpty ? "" : "\(initials) "
+        let initialsInMeeting = SlackPresenceMonitor.shared.initialsInMeeting
+        if initials.isEmpty {
+            button.attributedTitle = NSAttributedString(string: "")
+        } else {
+            let attributed = NSMutableAttributedString()
+            let baseAttributes: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 12)
+            ]
+            let underlineAttributes: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 12),
+                .underlineStyle: NSUnderlineStyle.single.rawValue,
+            ]
+            for char in initials {
+                let attrs = initialsInMeeting.contains(char) ? underlineAttributes : baseAttributes
+                attributed.append(NSAttributedString(string: String(char), attributes: attrs))
+            }
+            attributed.append(NSAttributedString(string: " ", attributes: baseAttributes))
+            button.attributedTitle = attributed
+        }
     }
 
     private func createImageWithActivityDot(baseImage: NSImage) -> NSImage {

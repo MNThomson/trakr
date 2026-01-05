@@ -31,6 +31,7 @@ class SlackPresenceMonitor: ObservableObject {
     // MARK: - Published Properties
 
     @Published private(set) var onlineInitials: String = ""
+    @Published private(set) var initialsInMeeting: Set<Character> = []
     @Published private(set) var isMeActive: Bool = false
 
     // MARK: - Properties
@@ -482,22 +483,24 @@ class SlackPresenceMonitor: ObservableObject {
         }
         isMeActive = meIsActive
 
+        var meetingInitials: Set<Character> = []
         let initials =
             onlineUsers
             .compactMap { userId -> String? in
                 guard let name = coworkers[userId], let first = name.first else { return nil }
                 // Skip "Me" from initials display - shown as green dot instead
                 if name == "Me" { return nil }
-                var initial = String(first).uppercased()
-                // Add underline for users in meetings when showMeetingStatus is enabled
+                let initial = Character(String(first).uppercased())
+                // Track which initials are in meetings when showMeetingStatus is enabled
                 if showMeetingStatus && usersInMeeting.contains(userId) {
-                    initial += "\u{0332}"  // Combining low line (underline)
+                    meetingInitials.insert(initial)
                 }
-                return initial
+                return String(initial)
             }
-            .sorted { $0.first?.lowercased() ?? "" < $1.first?.lowercased() ?? "" }
+            .sorted { $0.lowercased() < $1.lowercased() }
             .joined()
         onlineInitials = initials
+        initialsInMeeting = meetingInitials
     }
 
     private func scheduleReconnect() {

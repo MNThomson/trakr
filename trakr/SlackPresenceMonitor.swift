@@ -25,6 +25,7 @@ class SlackPresenceMonitor: ObservableObject {
     // MARK: - Published Properties
 
     @Published private(set) var onlineInitials: String = ""
+    @Published private(set) var isMeActive: Bool = false
 
     // MARK: - Properties
 
@@ -360,10 +361,22 @@ class SlackPresenceMonitor: ObservableObject {
     }
 
     private func updateInitials() {
+        // Check if "Me" user is active
+        var meIsActive = false
+        for (userId, name) in coworkers {
+            if name == "Me" && onlineUsers.contains(userId) {
+                meIsActive = true
+                break
+            }
+        }
+        isMeActive = meIsActive
+
         let initials =
             onlineUsers
             .compactMap { userId -> String? in
                 guard let name = coworkers[userId], let first = name.first else { return nil }
+                // Skip "Me" from initials display - shown as green dot instead
+                if name == "Me" { return nil }
                 var initial = String(first).uppercased()
                 // Add underline for users in meetings when showMeetingStatus is enabled
                 if showMeetingStatus && usersInMeeting.contains(userId) {

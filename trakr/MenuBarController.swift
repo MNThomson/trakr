@@ -303,8 +303,10 @@ class MenuBarController {
 
         submenu.addItem(.separator())
 
-        submenu.addItem(createMenuItem(title: "Credentials...", action: #selector(showSlackCredentialsInput)))
-        submenu.addItem(createMenuItem(title: "User IDs...", action: #selector(showSlackCoworkersInput)))
+        submenu.addItem(
+            createMenuItem(title: "Credentials...", action: #selector(showSlackCredentialsInput)))
+        submenu.addItem(
+            createMenuItem(title: "User IDs...", action: #selector(showSlackCoworkersInput)))
 
         return submenu
     }
@@ -347,6 +349,18 @@ class MenuBarController {
             .store(in: &cancellables)
 
         SlackPresenceMonitor.shared.$onlineInitials
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateStatusIcon() }
+            .store(in: &cancellables)
+
+        SlackPresenceMonitor.shared.$isMeActive
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateStatusIcon() }
+            .store(in: &cancellables)
+
+        // Observe system appearance changes for icon tinting
+        DistributedNotificationCenter.default()
+            .publisher(for: Notification.Name("AppleInterfaceThemeChangedNotification"))
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateStatusIcon() }
             .store(in: &cancellables)
@@ -404,17 +418,61 @@ class MenuBarController {
             variableValue = 0.0
         }
 
-        button.image = NSImage(
-            systemSymbolName: symbolName,
-            variableValue: variableValue,
-            accessibilityDescription: "Activity Timer"
-        )
-        button.image?.isTemplate = true
+        guard
+            let baseImage = NSImage(
+                systemSymbolName: symbolName,
+                variableValue: variableValue,
+                accessibilityDescription: "Activity Timer"
+            )
+        else { return }
+
+        let isMeActive = SlackPresenceMonitor.shared.isMeActive
+
+        // Create composite image with activity indicator if "Me" is active
+        if isMeActive {
+            let compositeImage = createImageWithActivityDot(baseImage: baseImage)
+            button.image = compositeImage
+        } else {
+            baseImage.isTemplate = true
+            button.image = baseImage
+        }
+
         button.imagePosition = .imageRight
 
         // Display online coworker initials
         let initials = SlackPresenceMonitor.shared.onlineInitials
         button.title = initials.isEmpty ? "" : "\(initials) "
+    }
+
+    private func createImageWithActivityDot(baseImage: NSImage) -> NSImage {
+        let dotSize: CGFloat = 4
+        let baseSize = baseImage.size
+
+        let compositeImage = NSImage(size: baseSize)
+        compositeImage.lockFocus()
+
+        // Draw the base image tinted for current appearance
+        let tintColor: NSColor =
+            NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? .white : .black
+        let tintedImage = baseImage.copy() as! NSImage
+        tintedImage.lockFocus()
+        tintColor.set()
+        NSRect(origin: .zero, size: baseSize).fill(using: .sourceAtop)
+        tintedImage.unlockFocus()
+
+        tintedImage.draw(in: NSRect(origin: .zero, size: baseSize))
+
+        // Draw green dot in lower right corner
+        let dotX = baseSize.width - dotSize + 1
+        let dotY: CGFloat = -1
+        let dotRect = NSRect(x: dotX, y: dotY, width: dotSize, height: dotSize)
+        NSColor.systemGreen.setFill()
+        NSBezierPath(ovalIn: dotRect).fill()
+
+        compositeImage.unlockFocus()
+        compositeImage.isTemplate = false
+        return compositeImage
     }
 
     private func updatePauseMenuItem() {
@@ -443,7 +501,7 @@ class MenuBarController {
     private func updateSlackSubmenu() {
         // Slack Presence submenu is at index 12
         guard let slackItem = settingsSubmenu.item(at: 12),
-              let slackSubmenu = slackItem.submenu
+            let slackSubmenu = slackItem.submenu
         else { return }
         slackItem.state = SlackPresenceMonitor.shared.isEnabled ? .on : .off
         // Update Enabled toggle state

@@ -368,6 +368,11 @@ class MenuBarController {
             .sink { [weak self] _ in self?.updateStatusIcon() }
             .store(in: &cancellables)
 
+        SlackPresenceMonitor.shared.$onlineUserPhotos
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateStatusIcon() }
+            .store(in: &cancellables)
+
         // Observe system appearance changes for icon tinting
         DistributedNotificationCenter.default()
             .publisher(for: Notification.Name("AppleInterfaceThemeChangedNotification"))
@@ -449,40 +454,205 @@ class MenuBarController {
 
         button.imagePosition = .imageRight
 
-        // Display online coworker initials with smaller font
-        let initials = SlackPresenceMonitor.shared.onlineInitials
-        let initialsInMeeting = SlackPresenceMonitor.shared.initialsInMeeting
-        let initialsUnavailable = SlackPresenceMonitor.shared.initialsUnavailable
-        if initials.isEmpty {
+        // Display online coworker profile photos
+        let userPhotos = SlackPresenceMonitor.shared.onlineUserPhotos
+        if userPhotos.isEmpty {
             button.attributedTitle = NSAttributedString(string: "")
         } else {
-            let attributed = NSMutableAttributedString()
-            let baseAttributes: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 12)
-            ]
-            let meetingAttributes: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 12),
-                .underlineStyle: NSUnderlineStyle.single.rawValue,
-            ]
-            let unavailableAttributes: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 12),
-                .underlineStyle:
-                    (NSUnderlineStyle.single.rawValue | NSUnderlineStyle.patternDot.rawValue),
-            ]
-            for char in initials {
-                let attrs: [NSAttributedString.Key: Any]
-                if initialsInMeeting.contains(char) {
-                    attrs = meetingAttributes
-                } else if initialsUnavailable.contains(char) {
-                    attrs = unavailableAttributes
-                } else {
-                    attrs = baseAttributes
-                }
-                attributed.append(NSAttributedString(string: String(char), attributes: attrs))
+            // Create composite image with profile photos
+            let photoImage = createProfilePhotosImage(users: userPhotos)
+            if let photoImage = photoImage {
+                // Use an attachment to display the image in the title
+                let attachment = NSTextAttachment()
+                attachment.image = photoImage
+                // Adjust vertical alignment to center with the status icon
+                let yOffset = (NSFont.menuBarFont(ofSize: 0).capHeight - photoImage.size.height) / 2
+                attachment.bounds = CGRect(
+                    x: 0, y: yOffset,
+                    width: photoImage.size.width, height: photoImage.size.height)
+                let imageString = NSMutableAttributedString(attachment: attachment)
+                imageString.append(NSAttributedString(string: " "))
+                button.attributedTitle = imageString
+            } else {
+                // Fallback to initials if no photos available
+                displayInitialsFallback(button: button, users: userPhotos)
             }
-            attributed.append(NSAttributedString(string: " ", attributes: baseAttributes))
-            button.attributedTitle = attributed
         }
+    }
+
+    private func createProfilePhotosImage(users: [SlackPresenceMonitor.UserPhotoInfo]) -> NSImage? {
+        let photoSize: CGFloat = 16  // Size for each profile photo
+        let spacing: CGFloat = 2  // Spacing between photos
+        let cornerRadius: CGFloat = 4  // Subtle rounding like Slack icons
+        let borderWidth: CGFloat = 1.5
+
+        // Filter users that have photos
+        let usersWithPhotos = users.filter { $0.image != nil }
+        let usersWithoutPhotos = users.filter { $0.image == nil }
+
+        guard !usersWithPhotos.isEmpty || !usersWithoutPhotos.isEmpty else { return nil }
+
+        let totalWidth =
+            CGFloat(usersWithPhotos.count) * (photoSize + spacing)
+            + CGFloat(usersWithoutPhotos.count) * (photoSize + spacing)
+        let compositeImage = NSImage(size: NSSize(width: totalWidth, height: photoSize))
+
+        compositeImage.lockFocus()
+
+        var xOffset: CGFloat = 0
+
+        // Draw users with photos first
+        for user in usersWithPhotos {
+            guard let photo = user.image else { continue }
+            drawRoundedPhoto(
+                photo: photo,
+                at: NSPoint(x: xOffset, y: 0),
+                size: photoSize,
+                cornerRadius: cornerRadius,
+                borderWidth: borderWidth,
+                isInMeeting: user.isInMeeting,
+                isUnavailable: user.isUnavailable
+            )
+            xOffset += photoSize + spacing
+        }
+
+        // Draw initials for users without photos
+        for user in usersWithoutPhotos {
+            drawInitialSquare(
+                name: user.name,
+                at: NSPoint(x: xOffset, y: 0),
+                size: photoSize,
+                cornerRadius: cornerRadius,
+                borderWidth: borderWidth,
+                isInMeeting: user.isInMeeting,
+                isUnavailable: user.isUnavailable
+            )
+            xOffset += photoSize + spacing
+        }
+
+        compositeImage.unlockFocus()
+        return compositeImage
+    }
+
+    private func drawRoundedPhoto(
+        photo: NSImage,
+        at point: NSPoint,
+        size: CGFloat,
+        cornerRadius: CGFloat,
+        borderWidth: CGFloat,
+        isInMeeting: Bool,
+        isUnavailable: Bool
+    ) {
+        let rect = NSRect(x: point.x, y: point.y, width: size, height: size)
+
+        // Create rounded rect clipping path
+        let roundedPath = NSBezierPath(
+            roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius)
+
+        // Draw border for status indication
+        if isInMeeting {
+            NSColor.systemOrange.setStroke()
+            roundedPath.lineWidth = borderWidth
+            roundedPath.stroke()
+        } else if isUnavailable {
+            NSColor.systemGray.setStroke()
+            roundedPath.lineWidth = borderWidth
+            roundedPath.stroke()
+        }
+
+        // Clip to rounded rect and draw photo
+        NSGraphicsContext.saveGraphicsState()
+        let insetRect = rect.insetBy(dx: borderWidth / 2, dy: borderWidth / 2)
+        let insetPath = NSBezierPath(
+            roundedRect: insetRect, xRadius: cornerRadius - borderWidth / 2,
+            yRadius: cornerRadius - borderWidth / 2)
+        insetPath.addClip()
+
+        photo.draw(
+            in: insetRect,
+            from: NSRect(origin: .zero, size: photo.size),
+            operation: .sourceOver,
+            fraction: isUnavailable ? 0.5 : 1.0
+        )
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func drawInitialSquare(
+        name: String,
+        at point: NSPoint,
+        size: CGFloat,
+        cornerRadius: CGFloat,
+        borderWidth: CGFloat,
+        isInMeeting: Bool,
+        isUnavailable: Bool
+    ) {
+        let rect = NSRect(x: point.x, y: point.y, width: size, height: size)
+        let roundedPath = NSBezierPath(
+            roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius)
+
+        // Background color
+        let isDarkMode = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let bgColor = isDarkMode ? NSColor.darkGray : NSColor.lightGray
+        bgColor.setFill()
+        roundedPath.fill()
+
+        // Draw border for status indication
+        if isInMeeting {
+            NSColor.systemOrange.setStroke()
+            roundedPath.lineWidth = borderWidth
+            roundedPath.stroke()
+        } else if isUnavailable {
+            NSColor.systemGray.setStroke()
+            roundedPath.lineWidth = borderWidth
+            roundedPath.stroke()
+        }
+
+        // Draw initial letter
+        let initial = String(name.prefix(1)).uppercased()
+        let font = NSFont.systemFont(ofSize: size * 0.6, weight: .medium)
+        let textColor = isDarkMode ? NSColor.white : NSColor.black
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: isUnavailable ? textColor.withAlphaComponent(0.5) : textColor,
+        ]
+        let textSize = initial.size(withAttributes: attributes)
+        let textPoint = NSPoint(
+            x: point.x + (size - textSize.width) / 2,
+            y: point.y + (size - textSize.height) / 2
+        )
+        initial.draw(at: textPoint, withAttributes: attributes)
+    }
+
+    private func displayInitialsFallback(
+        button: NSStatusBarButton, users: [SlackPresenceMonitor.UserPhotoInfo]
+    ) {
+        let attributed = NSMutableAttributedString()
+        let baseAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12)
+        ]
+        let meetingAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12),
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+        ]
+        let unavailableAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12),
+            .underlineStyle:
+                (NSUnderlineStyle.single.rawValue | NSUnderlineStyle.patternDot.rawValue),
+        ]
+        for user in users {
+            let initial = String(user.name.prefix(1)).uppercased()
+            let attrs: [NSAttributedString.Key: Any]
+            if user.isInMeeting {
+                attrs = meetingAttributes
+            } else if user.isUnavailable {
+                attrs = unavailableAttributes
+            } else {
+                attrs = baseAttributes
+            }
+            attributed.append(NSAttributedString(string: initial, attributes: attrs))
+        }
+        attributed.append(NSAttributedString(string: " ", attributes: baseAttributes))
+        button.attributedTitle = attributed
     }
 
     private func createImageWithActivityDot(baseImage: NSImage) -> NSImage {

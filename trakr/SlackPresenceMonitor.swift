@@ -29,12 +29,23 @@ class SlackPresenceMonitor: ObservableObject {
 
     static let shared = SlackPresenceMonitor()
 
+    // MARK: - Types
+
+    struct UserPhotoInfo: Identifiable {
+        let id: String  // Slack user ID
+        let name: String
+        let image: NSImage?
+        let isInMeeting: Bool
+        let isUnavailable: Bool
+    }
+
     // MARK: - Published Properties
 
     @Published private(set) var onlineInitials: String = ""
     @Published private(set) var initialsInMeeting: Set<Character> = []
     @Published private(set) var initialsUnavailable: Set<Character> = []
     @Published private(set) var isMeActive: Bool = false
+    @Published private(set) var onlineUserPhotos: [UserPhotoInfo] = []
 
     // MARK: - Properties
 
@@ -100,6 +111,10 @@ class SlackPresenceMonitor: ObservableObject {
 
     // Message tracking for heartbeat monitoring
     private var lastMessageTime: Date?
+
+    // Profile photo cache: user ID -> NSImage
+    private var profilePhotoCache: [String: NSImage] = [:]
+    private var profilePhotoURLs: [String: String] = [:]  // user ID -> photo URL
 
     /// Emojis that indicate the user is in a meeting or huddle
     private let meetingEmojis = [":calendar:", ":spiral_calendar_pad:", ":date:", ":headphones:"]
@@ -504,7 +519,7 @@ class SlackPresenceMonitor: ObservableObject {
         return unavailableKeywords.contains { lowerText.contains($0) }
     }
 
-    /// Fetches the current status emoji for all coworkers on connection
+    /// Fetches the current status emoji and profile photo for all coworkers on connection
     private func fetchInitialStatuses() {
         let userIds = Array(coworkers.keys)
         guard !userIds.isEmpty else { return }
@@ -533,6 +548,12 @@ class SlackPresenceMonitor: ObservableObject {
                 let inMeeting = self.meetingEmojis.contains(statusEmoji)
                 let isUnavailable = self.checkUnavailable(emoji: statusEmoji, text: statusText)
 
+                // Get profile photo URL (prefer 48px for menu bar)
+                let photoURL =
+                    profile["image_48"] as? String
+                    ?? profile["image_32"] as? String
+                    ?? profile["image_24"] as? String
+
                 DispatchQueue.main.async {
                     if inMeeting {
                         self.usersInMeeting.insert(userId)
@@ -546,10 +567,37 @@ class SlackPresenceMonitor: ObservableObject {
                         self.usersUnavailable.remove(userId)
                     }
 
+                    // Store photo URL and fetch if needed
+                    if let photoURL = photoURL {
+                        self.profilePhotoURLs[userId] = photoURL
+                        self.fetchProfilePhoto(userId: userId, urlString: photoURL)
+                    }
+
                     self.updateInitials()
                 }
             }.resume()
         }
+    }
+
+    /// Fetches and caches a profile photo from URL
+    private func fetchProfilePhoto(userId: String, urlString: String) {
+        // Skip if already cached
+        if profilePhotoCache[userId] != nil { return }
+
+        guard let url = URL(string: urlString) else { return }
+
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
+            guard let self = self,
+                let data = data,
+                error == nil,
+                let image = NSImage(data: data)
+            else { return }
+
+            DispatchQueue.main.async {
+                self.profilePhotoCache[userId] = image
+                self.updateInitials()
+            }
+        }.resume()
     }
 
     private func updateInitials() {
@@ -565,6 +613,8 @@ class SlackPresenceMonitor: ObservableObject {
 
         var meetingInitials: Set<Character> = []
         var unavailableInitials: Set<Character> = []
+        var photoInfos: [UserPhotoInfo] = []
+
         let initials =
             onlineUsers
             .compactMap { userId -> String? in
@@ -572,14 +622,28 @@ class SlackPresenceMonitor: ObservableObject {
                 // Skip "Me" from initials display - shown as green dot instead
                 if name == "Me" { return nil }
                 let initial = Character(String(first).uppercased())
+                let inMeeting = showMeetingStatus && usersInMeeting.contains(userId)
+                let isUnavailable = showMeetingStatus && usersUnavailable.contains(userId)
+
                 // Track which initials are in meetings when showMeetingStatus is enabled
-                if showMeetingStatus && usersInMeeting.contains(userId) {
+                if inMeeting {
                     meetingInitials.insert(initial)
                 }
                 // Track which initials are unavailable when showMeetingStatus is enabled
-                if showMeetingStatus && usersUnavailable.contains(userId) {
+                if isUnavailable {
                     unavailableInitials.insert(initial)
                 }
+
+                // Build photo info for menu bar display
+                let photoInfo = UserPhotoInfo(
+                    id: userId,
+                    name: name,
+                    image: profilePhotoCache[userId],
+                    isInMeeting: inMeeting,
+                    isUnavailable: isUnavailable
+                )
+                photoInfos.append(photoInfo)
+
                 return String(initial)
             }
             .sorted { $0.lowercased() < $1.lowercased() }
@@ -587,6 +651,9 @@ class SlackPresenceMonitor: ObservableObject {
         onlineInitials = initials
         initialsInMeeting = meetingInitials
         initialsUnavailable = unavailableInitials
+
+        // Sort photos by name for consistent display
+        onlineUserPhotos = photoInfos.sorted { $0.name.lowercased() < $1.name.lowercased() }
     }
 
     /// Starts monitoring for stale connections - only reconnects if no messages received

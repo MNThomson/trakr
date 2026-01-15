@@ -304,6 +304,11 @@ class MenuBarController {
         submenu.addItem(.separator())
 
         submenu.addItem(
+            createMenuItem(title: "Restart Connection", action: #selector(restartSlackConnection)))
+
+        submenu.addItem(.separator())
+
+        submenu.addItem(
             createMenuItem(title: "Credentials...", action: #selector(showSlackCredentialsInput)))
         submenu.addItem(
             createMenuItem(title: "User IDs...", action: #selector(showSlackCoworkersInput)))
@@ -1042,6 +1047,10 @@ class MenuBarController {
     @objc private func toggleShowMeetingStatus(_ sender: NSMenuItem) {
         SlackPresenceMonitor.shared.showMeetingStatus.toggle()
         sender.state = SlackPresenceMonitor.shared.showMeetingStatus ? .on : .off
+    }
+
+    @objc private func restartSlackConnection() {
+        SlackPresenceMonitor.shared.reconnect()
     }
 
     @objc private func setIdleThreshold(_ sender: NSMenuItem) {

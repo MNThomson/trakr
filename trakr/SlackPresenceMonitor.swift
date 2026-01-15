@@ -23,6 +23,8 @@ class SlackPresenceMonitor: ObservableObject {
     private enum Defaults {
         static let heartbeatTimeout: TimeInterval = 300  // 5 minutes without messages = stale
         static let heartbeatCheckInterval: TimeInterval = 60  // Check every minute
+        static let initialReconnectDelay: TimeInterval = 1.0
+        static let maxReconnectDelay: TimeInterval = 60.0  // Max 1 minute between retries
     }
 
     // MARK: - Singleton
@@ -111,6 +113,9 @@ class SlackPresenceMonitor: ObservableObject {
 
     // Message tracking for heartbeat monitoring
     private var lastMessageTime: Date?
+
+    // Reconnect backoff tracking
+    private var currentReconnectDelay: TimeInterval = Defaults.initialReconnectDelay
 
     // Profile photo cache: user ID -> NSImage
     private var profilePhotoCache: [String: NSImage] = [:]
@@ -385,30 +390,46 @@ class SlackPresenceMonitor: ObservableObject {
 
     private func receiveMessage() {
         webSocketTask?.receive { [weak self] result in
+            guard let self = self else { return }
+
             switch result {
             case .success(let message):
-                self?.lastMessageTime = Date()
+                // Update state on main thread to avoid data races
+                DispatchQueue.main.async {
+                    self.lastMessageTime = Date()
+                    // Reset backoff on successful message
+                    self.currentReconnectDelay = Defaults.initialReconnectDelay
+                }
                 switch message {
                 case .string(let text):
-                    self?.handleMessage(text)
+                    self.handleMessage(text)
                 case .data(let data):
                     if let text = String(data: data, encoding: .utf8) {
-                        self?.handleMessage(text)
+                        self.handleMessage(text)
                     }
                 @unknown default:
                     break
                 }
-                self?.receiveMessage()
+                self.receiveMessage()
 
             case .failure(let error):
                 Self.log("WebSocket receive error: \(error.localizedDescription)")
 
-                // Immediately clear online status so green dots disappear
-                self?.clearOnlineStatus()
+                // All state modifications must happen on main thread to avoid data races
+                DispatchQueue.main.async {
+                    // Clear online status so green dots disappear
+                    self.clearOnlineStatus()
 
-                // Reconnect after brief delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    self?.reconnect()
+                    // Reconnect with exponential backoff
+                    let delay = self.currentReconnectDelay
+                    Self.log("Reconnecting in \(Int(delay))s...")
+                    self.currentReconnectDelay = min(
+                        self.currentReconnectDelay * 2,
+                        Defaults.maxReconnectDelay
+                    )
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                        self?.reconnect()
+                    }
                 }
             }
         }
@@ -622,6 +643,7 @@ class SlackPresenceMonitor: ObservableObject {
                 // Skip "Me" from initials display - shown as green dot instead
                 if name == "Me" { return nil }
                 let initial = Character(String(first).uppercased())
+                // Check meeting/unavailable status only when showMeetingStatus is enabled
                 let inMeeting = showMeetingStatus && usersInMeeting.contains(userId)
                 let isUnavailable = showMeetingStatus && usersUnavailable.contains(userId)
 

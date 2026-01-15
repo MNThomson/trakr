@@ -484,7 +484,7 @@ class MenuBarController {
         let photoSize: CGFloat = 16  // Size for each profile photo
         let spacing: CGFloat = 2  // Spacing between photos
         let cornerRadius: CGFloat = 4  // Subtle rounding like Slack icons
-        let borderWidth: CGFloat = 1.5
+        let borderWidth: CGFloat = 1.5  // Thicker border for visibility
 
         // Filter users that have photos
         let usersWithPhotos = users.filter { $0.image != nil }
@@ -545,36 +545,36 @@ class MenuBarController {
     ) {
         let rect = NSRect(x: point.x, y: point.y, width: size, height: size)
 
-        // Create rounded rect clipping path
+        // Clip to rounded rect and draw photo first
+        NSGraphicsContext.saveGraphicsState()
         let roundedPath = NSBezierPath(
             roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius)
-
-        // Draw border for status indication
-        if isInMeeting {
-            NSColor.systemOrange.setStroke()
-            roundedPath.lineWidth = borderWidth
-            roundedPath.stroke()
-        } else if isUnavailable {
-            NSColor.systemGray.setStroke()
-            roundedPath.lineWidth = borderWidth
-            roundedPath.stroke()
-        }
-
-        // Clip to rounded rect and draw photo
-        NSGraphicsContext.saveGraphicsState()
-        let insetRect = rect.insetBy(dx: borderWidth / 2, dy: borderWidth / 2)
-        let insetPath = NSBezierPath(
-            roundedRect: insetRect, xRadius: cornerRadius - borderWidth / 2,
-            yRadius: cornerRadius - borderWidth / 2)
-        insetPath.addClip()
+        roundedPath.addClip()
 
         photo.draw(
-            in: insetRect,
+            in: rect,
             from: NSRect(origin: .zero, size: photo.size),
             operation: .sourceOver,
             fraction: isUnavailable ? 0.5 : 1.0
         )
         NSGraphicsContext.restoreGraphicsState()
+
+        // Draw border on top for status indication
+        if isInMeeting || isUnavailable {
+            // Inset slightly so the stroke doesn't get clipped at the edge
+            let borderRect = rect.insetBy(dx: borderWidth / 2, dy: borderWidth / 2)
+            let borderPath = NSBezierPath(
+                roundedRect: borderRect,
+                xRadius: cornerRadius - borderWidth / 2,
+                yRadius: cornerRadius - borderWidth / 2)
+            borderPath.lineWidth = borderWidth
+            if isInMeeting {
+                NSColor.white.setStroke()
+            } else {
+                NSColor.gray.setStroke()
+            }
+            borderPath.stroke()
+        }
     }
 
     private func drawInitialSquare(
@@ -597,14 +597,19 @@ class MenuBarController {
         roundedPath.fill()
 
         // Draw border for status indication
-        if isInMeeting {
-            NSColor.systemOrange.setStroke()
-            roundedPath.lineWidth = borderWidth
-            roundedPath.stroke()
-        } else if isUnavailable {
-            NSColor.systemGray.setStroke()
-            roundedPath.lineWidth = borderWidth
-            roundedPath.stroke()
+        if isInMeeting || isUnavailable {
+            let borderRect = rect.insetBy(dx: borderWidth / 2, dy: borderWidth / 2)
+            let borderPath = NSBezierPath(
+                roundedRect: borderRect,
+                xRadius: cornerRadius - borderWidth / 2,
+                yRadius: cornerRadius - borderWidth / 2)
+            borderPath.lineWidth = borderWidth
+            if isInMeeting {
+                NSColor.white.setStroke()
+            } else {
+                NSColor.gray.setStroke()
+            }
+            borderPath.stroke()
         }
 
         // Draw initial letter

@@ -11,7 +11,6 @@ class ActivityTracker: ObservableObject {
         static let idleThreshold = "idleThreshold"
         static let targetWorkDaySeconds = "targetWorkDaySeconds"
         static let goalReachedTime = "goalReachedTime"
-        static let screenOverlayEnabled = "screenOverlayEnabled"
         static let zoomStandingReminderEnabled = "zoomStandingReminderEnabled"
         static let eyeBreakIntervalMinutes = "eyeBreakIntervalMinutes"
         static let stretchBreakEnabled = "stretchBreakEnabled"
@@ -52,12 +51,6 @@ class ActivityTracker: ObservableObject {
 
     var idleThreshold: TimeInterval {
         didSet { UserDefaults.standard.set(idleThreshold, forKey: Keys.idleThreshold) }
-    }
-
-    var screenOverlayEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(screenOverlayEnabled, forKey: Keys.screenOverlayEnabled)
-        }
     }
 
     var zoomStandingReminderEnabled: Bool {
@@ -158,9 +151,6 @@ class ActivityTracker: ObservableObject {
         let savedTargetSeconds = UserDefaults.standard.integer(forKey: Keys.targetWorkDaySeconds)
         targetWorkDaySeconds =
             savedTargetSeconds > 0 ? savedTargetSeconds : Defaults.targetWorkDaySeconds
-
-        // Default to disabled if not set
-        screenOverlayEnabled = UserDefaults.standard.bool(forKey: Keys.screenOverlayEnabled)
 
         // Default Zoom standing reminder to disabled if not set
         zoomStandingReminderEnabled = UserDefaults.standard.bool(
@@ -296,9 +286,6 @@ class ActivityTracker: ObservableObject {
             UserDefaults.standard.set(now, forKey: Keys.goalReachedTime)
             NotificationService.shared.sendDailyGoalNotification(
                 formattedActiveTime: formattedActiveTime)
-            if screenOverlayEnabled {
-                ScreenOverlayController.shared.showOverlay()
-            }
         }
 
         if activeSeconds % Defaults.saveInterval == 0 {
